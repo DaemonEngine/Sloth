@@ -21,7 +21,7 @@ import sys, os, re, argparse
 class TextureSet():
 	colorRE = re.compile("^[0-9a-f]{6}$")
 
-	def __init__(self, radToAddExponent = 1.0, heightNormalsMod = 1.0):
+	def __init__(self, radToAddExponent = 1.0, heightNormalsMod = 1.0, guessKeywords = False):
 		self.header           = ""
 		self.suffixes         = dict() # map type -> suffix
 		self.lightColors      = dict() # color name -> RGB color triple
@@ -29,6 +29,7 @@ class TextureSet():
 		self.mapping          = dict() # set name -> shader name -> key -> value
 		self.radToAddExp      = radToAddExponent # used to convert radiosity RGB values into addition map colors
 		self.heightNormalsMod = heightNormalsMod # used when generating normals from height maps
+		self.guessKeywords    = guessKeywords    # try to guess keywords based on shader (meta)data
 
 		# set default suffixes
 		self.setSuffixes()
@@ -136,18 +137,35 @@ class TextureSet():
 		# add new shaders (adds back original shader under new name, without addition map)
 		self.mapping[setname].update(newShaders)
 
-	def __addKeywords(self, setname):
+	def __guessKeywords(self, setname):
 		"Guesses some keywords based on shader (meta)data."
 		for shadername in self.mapping[setname]:
 			shader = self.mapping[setname][shadername]
 
-			shader["keywords"] = dict()
+			shader.setdefault("keywords", dict())
 
-			# surfaceParm metalSteps
-			for metal in ("metal", "steel", "iron", "wall"):
-				if metal in shadername:
-					shader["keywords"].setdefault("surfaceparm", set())
-					shader["keywords"]["surfaceparm"].add("metalsteps")
+			# mapping from surfaceparm values to words that trigger their use
+			surfaceparms = \
+			{
+				"donotenter": ["lava", "slime"],
+				"dust":       ["sand", "dust"],
+				"flesh":      ["flesh", "meat", "organ"],
+				"ladder":     ["ladder"],
+				"lava":       ["lava"],
+				"metalsteps": ["metal", "steel", "iron", "tread", "grate"],
+				"slick":      ["ice"],
+				"slime":      ["slime"],
+				"water":      ["water"],
+			}
+
+			for surfaceparm, words in surfaceparms.items():
+				for word in words:
+					if word in shadername:
+						shader["keywords"].setdefault("surfaceparm", set())
+						shader["keywords"]["surfaceparm"].add(surfaceparm)
+
+			if len(shader["keywords"]) == 0:
+				shader.pop("keywords")
 
 	def generateSet(self, path, setname = None, cutextension = None):
 		"Generates shader data for a given texture source folder."
@@ -200,7 +218,9 @@ class TextureSet():
 					self.mapping[setname][shadername][maptype] = None
 
 		self.__expandLightShaders(setname)
-		self.__addKeywords(setname)
+
+		if self.guessKeywords:
+			self.__guessKeywords(setname)
 
 		print("Added set "+setname+" with "+str(len(self.mapping[setname]))+" shaders.", file = sys.stderr)
 
@@ -257,27 +277,36 @@ class TextureSet():
 				content += "\n"+setname+"/"+shadername+"\n{\n"
 
 				if preview:
-					content += "\tqer_EditorImage    "+path+preview+"\n\n"
+					content += "\tqer_editorImage     "+path+preview+"\n\n"
+
+				if "keywords" in shader:
+					for key, value in shader["keywords"].items():
+						if hasattr(value, "__iter__"):
+							for value in value:
+								content += "\t"+key+" "*max(1, 20-len(key))+str(value)+"\n"
+						else:
+							content += "\t"+key+" "*max(1, 20-len(key))+str(value)+"\n"
+					content += "\n"
 
 				if "lightIntensity" in shader["meta"] and shader["meta"]["lightIntensity"] > 0 \
 				   and "lightColor" in shader["meta"]:
-					content += "\tq3map_surfacelight "+"%d" % shader["meta"]["lightIntensity"]+"\n"
-					content += "\tq3map_lightRGB     "+"%.2f %.2f %.2f" % (r, g, b)+"\n\n"
+					content += "\tq3map_surfacelight  "+"%d" % shader["meta"]["lightIntensity"]+"\n"
+					content += "\tq3map_lightRGB      "+"%.2f %.2f %.2f" % (r, g, b)+"\n\n"
 
 				if shader["diffuse"]:
-					content += "\tdiffuseMap         "+path+shader["diffuse"]+"\n"
+					content += "\tdiffuseMap          "+path+shader["diffuse"]+"\n"
 
 				if shader["normal"]:
 					if shader["height"] and self.heightNormalsMod > 0:
-						content += "\tnormalMap          addnormals ( "+path+shader["normal"]+\
+						content += "\tnormalMap           addnormals ( "+path+shader["normal"]+\
 						           ", heightmap ( "+path+shader["height"]+", "+"%.2f" % self.heightNormalsMod+" ) )\n"
 					else:
 						content += "\tnormalMap          "+path+shader["normal"]+"\n"
 				elif shader["height"] and self.heightNormalsMod > 0:
-					content += "\tnormalMap          heightmap ( "+path+shader["height"]+", "+"%.2f" % self.heightNormalsMod+" )\n"
+					content += "\tnormalMap           heightmap ( "+path+shader["height"]+", "+"%.2f" % self.heightNormalsMod+" )\n"
 
 				if shader["specular"]:
-					content += "\tspecularMap        "+path+shader["specular"]+"\n"
+					content += "\tspecularMap         "+path+shader["specular"]+"\n"
 
 				if shader["addition"]:
 					content += "\n\t{\n"+\
@@ -333,6 +362,9 @@ if __name__ == "__main__":
 	parser.add_argument("-m", "--heightnormals", metavar="MOD", type=float, default=1.0,
 	                    help="Modifier used for generating normals from a heightmap")
 
+	parser.add_argument("-g", "--guess", action="store_true",
+	                    help="Guess additional keywords based on shader (meta)data")
+
 	parser.add_argument("-o", "--out", metavar="DEST", type=argparse.FileType("w"),
 	                    help="write shader to this file")
 
@@ -347,7 +379,7 @@ if __name__ == "__main__":
 
 	args = parser.parse_args()
 
-	ts = TextureSet(radToAddExponent = args.exp, heightNormalsMod = args.heightnormals)
+	ts = TextureSet(radToAddExponent = args.exp, heightNormalsMod = args.heightnormals, guessKeywords = args.guess)
 
 	ts.setSuffixes(diffuse = args.diff, normal = args.normal, height = args.height,
 	               specular = args.spec, addition = args.add, preview = args.prev)
