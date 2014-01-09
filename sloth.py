@@ -98,7 +98,7 @@ class TextureSet():
 		for shadername in self.mapping[setname]:
 			shader = self.mapping[setname][shadername]
 
-			if shader["virtual"]:
+			if shader["meta"]["virtual"]:
 				continue
 
 			if shader["addition"]:
@@ -110,17 +110,18 @@ class TextureSet():
 					for intensityName, intensity in self.lightIntensities.items():
 						newShader = dict()
 
-						# copy metadata and maps from original
+						# copy path and maps from original
 						for object in list(self.suffixes.keys()) + ["path"]:
 							newShader[object] = shader[object]
 
-						newShader["virtual"] = True
-						newShader["keywords"] = dict()
-						newShader["keywords"]["lightColor"] = dict()
-						newShader["keywords"]["lightColor"]["r"] = r
-						newShader["keywords"]["lightColor"]["g"] = g
-						newShader["keywords"]["lightColor"]["b"] = b
-						newShader["keywords"]["lightIntensity"] = intensity
+						# create new metadata
+						newShader["meta"]                    = dict()
+						newShader["meta"]["virtual"]         = True
+						newShader["meta"]["lightColor"]      = dict()
+						newShader["meta"]["lightColor"]["r"] = r
+						newShader["meta"]["lightColor"]["g"] = g
+						newShader["meta"]["lightColor"]["b"] = b
+						newShader["meta"]["lightIntensity"]  = intensity
 
 						newShaders[shadername+"_"+colorName+"_"+intensityName] = newShader
 
@@ -135,16 +136,18 @@ class TextureSet():
 		# add new shaders (adds back original shader under new name, without addition map)
 		self.mapping[setname].update(newShaders)
 
-	def __guessKeywords(self, setname):
+	def __addKeywords(self, setname):
 		"Guesses some keywords based on shader (meta)data."
 		for shadername in self.mapping[setname]:
 			shader = self.mapping[setname][shadername]
 
+			shader["keywords"] = dict()
+
 			# surfaceParm metalSteps
 			for metal in ("metal", "steel", "iron", "wall"):
 				if metal in shadername:
-					shader["keywords"].setdefault("surfaceParm", set())
-					shader["keywords"]["surfaceParm"].add("metalSteps")
+					shader["keywords"].setdefault("surfaceparm", set())
+					shader["keywords"]["surfaceparm"].add("metalsteps")
 
 	def generateSet(self, path, setname = None, cutextension = None):
 		"Generates shader data for a given texture source folder."
@@ -174,10 +177,10 @@ class TextureSet():
 			shadername = diffusemap.rsplit(self.suffixes["diffuse"])[0]
 			shader     = self.mapping[setname][shadername] = dict()
 
-			shader["diffuse"]  = diffusemap
-			shader["path"]     = root+"/"+os.path.basename(os.path.abspath(path))
-			shader["virtual"]  = False
-			shader["keywords"] = dict()
+			shader["diffuse"]         = diffusemap
+			shader["path"]            = root+"/"+os.path.basename(os.path.abspath(path))
+			shader["meta"]            = dict()
+			shader["meta"]["virtual"] = False
 
 			# attempt to find a map of every known non-diffuse type
 			# assumes that non-diffuse maps have the same name as the diffuse or form a start of it, prefers longer names
@@ -197,7 +200,7 @@ class TextureSet():
 					self.mapping[setname][shadername][maptype] = None
 
 		self.__expandLightShaders(setname)
-		self.__guessKeywords(setname)
+		self.__addKeywords(setname)
 
 		print("Added set "+setname+" with "+str(len(self.mapping[setname]))+" shaders.", file = sys.stderr)
 
@@ -243,10 +246,10 @@ class TextureSet():
 				else:
 					preview = None
 
-				if "lightColor" in shader["keywords"]:
-					r = shader["keywords"]["lightColor"]["r"] / 0xff
-					g = shader["keywords"]["lightColor"]["g"] / 0xff
-					b = shader["keywords"]["lightColor"]["b"] / 0xff
+				if "lightColor" in shader["meta"]:
+					r = shader["meta"]["lightColor"]["r"] / 0xff
+					g = shader["meta"]["lightColor"]["g"] / 0xff
+					b = shader["meta"]["lightColor"]["b"] / 0xff
 				else:
 					r = g = b = None
 
@@ -256,9 +259,9 @@ class TextureSet():
 				if preview:
 					content += "\tqer_EditorImage    "+path+preview+"\n\n"
 
-				if "lightIntensity" in shader["keywords"] and shader["keywords"]["lightIntensity"] > 0 \
-				   and "lightColor" in shader["keywords"]:
-					content += "\tq3map_surfacelight "+"%d" % shader["keywords"]["lightIntensity"]+"\n"
+				if "lightIntensity" in shader["meta"] and shader["meta"]["lightIntensity"] > 0 \
+				   and "lightColor" in shader["meta"]:
+					content += "\tq3map_surfacelight "+"%d" % shader["meta"]["lightIntensity"]+"\n"
 					content += "\tq3map_lightRGB     "+"%.2f %.2f %.2f" % (r, g, b)+"\n\n"
 
 				if shader["diffuse"]:
@@ -280,7 +283,7 @@ class TextureSet():
 					content += "\n\t{\n"+\
 							   "\t\tmap   "+path+shader["addition"]+"\n"+\
 							   "\t\tblend add\n"
-					if "lightColor" in shader["keywords"]:
+					if "lightColor" in shader["meta"]:
 						content += \
 							   "\t\tred   "+"%.2f" % self.__radToAdd(r)+"\n"+\
 							   "\t\tgreen "+"%.2f" % self.__radToAdd(g)+"\n"+\
