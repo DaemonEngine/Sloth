@@ -15,17 +15,22 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import sys, os, re, argparse
+import sys, os, re, argparse, copy
+
+from PIL import Image
 
 
 class TextureSet():
+
 	colorRE = re.compile("^[0-9a-f]{6}$")
+
 
 	def __init__(self, radToAddExponent = 1.0, heightNormalsMod = 1.0, guessKeywords = False):
 		self.header           = ""
 		self.suffixes         = dict() # map type -> suffix
 		self.lightColors      = dict() # color name -> RGB color triple
-		self.lightIntensities = dict() # intensity name -> intensity
+		self.customLights     = dict() # intensity name -> intensity
+		self.predefLights     = dict() # intensity name -> intensity
 		self.mapping          = dict() # set name -> shader name -> key -> value
 		self.radToAddExp      = radToAddExponent # used to convert radiosity RGB values into addition map colors
 		self.heightNormalsMod = heightNormalsMod # used when generating normals from height maps
@@ -34,9 +39,11 @@ class TextureSet():
 		# set default suffixes
 		self.setSuffixes()
 
+
 	def setHeader(self, text):
 		"Sets a header text to be put at the top of the shader file."
 		self.header = text
+
 
 	def setSuffixes(self, diffuse = "_d", normal = "_n", height = "_h", specular = "_s", addition = "_a", preview = "_p"):
 		"Sets the filename suffixes for the different texture map types."
@@ -46,6 +53,7 @@ class TextureSet():
 		self.suffixes["specular"] = specular
 		self.suffixes["addition"] = addition
 		self.suffixes["preview"]  = preview
+
 
 	def addLightColor(self, name, color):
 		"Adds a light color with a given name to be used for light emitting shaders."
@@ -62,12 +70,13 @@ class TextureSet():
 
 		self.lightColors[name] = (r, g, b)
 
-	def addLightIntensity(self, intensity):
+
+	def __addLightIntensity(self, intensity, custom):
 		"Adds a light intensity to be used for light emitting shaders."
 		intensity = int(intensity)
 
 		if intensity < 0:
-			print("Ignoring negative light intensity.", file = sys.stderr)
+			print("Ignoring negative light intensity.", file = sys.stderr)["meta"]
 			return
 
 		if intensity >= 10000:
@@ -77,49 +86,64 @@ class TextureSet():
 		else:
 			name = str(intensity)
 
-		if name in self.lightIntensities and intensity != self.lightIntensities[name]:
-			print("Overwriting light intensity "+name+": "+str(self.lightIntensities[name])+" -> "+str(intensity), file = sys.stderr)
+		if custom:
+			self.customLights[name] = intensity
+		else:
+			self.predefLights[name] = intensity
 
-		self.lightIntensities[name] = intensity
+
+	def addCustomLightIntensity(self, intensity):
+		self.__addLightIntensity(intensity, True)
+
+
+	def addPredefLightIntensity(self, intensity):
+		self.__addLightIntensity(intensity, False)
+
+
+	def __analyzeMaps(self, shader):
+		"Retrieves metadata from a shader's maps, such as whether there's an alpha channel on the diffuse map."
+		# diffuse map
+		img = Image.open(shader["abspath"]+os.path.sep+shader["diffuse"]+shader["diffuseExt"], "r")
+		shader["meta"]["diffuseAlpha"] = ( img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info) )
+
+		# addition map
+		if shader["addition"]:
+			img = Image.open(shader["abspath"]+os.path.sep+shader["addition"]+shader["additionExt"], "r")
+			shader["meta"]["additionGrayscale"] = ( img.mode in ("L", "LA") )
+		else:
+			shader["meta"]["additionGrayscale"] = False
+
 
 	def __expandLightShaders(self, setname):
-		"Replaces every non-virtual shader with an addition map with a set of virtual shaders for each light "
-		"color/intensity combination as well as a not glowing (non-virtual) version."
-		if len(self.lightColors) == 0 or len(self.lightIntensities) == 0:
-			return
-
+		"Replaces every shader with an addition map with a set of shaders for each light color/intensity combination "
+		"(only intensity for non-grayscale addition maps) as well as a not glowing version."
 		newShaders = dict()
 		delNames   = set()
 
 		for shadername in self.mapping[setname]:
 			shader = self.mapping[setname][shadername]
 
-			if shader["meta"]["virtual"]:
-				continue
-
 			if shader["addition"]:
 				# mark original shader for deletion
 				delNames.add(shadername)
 
-				# add addition map shaders
-				for colorName, (r, g, b) in self.lightColors.items():
-					for intensityName, intensity in self.lightIntensities.items():
-						newShader = dict()
+				if shader["meta"]["additionGrayscale"]:
+					# the addition map is grayscale, so
+					for colorName, (r, g, b) in self.lightColors.items():
+						for intensityName, intensity in self.customLights.items():
+							newShader = copy.deepcopy(shader)
 
-						# copy path and maps from original
-						for object in list(self.suffixes.keys()) + ["path"]:
-							newShader[object] = shader[object]
+							newShader["meta"]["lightIntensity"]  = intensity
+							newShader["meta"]["lightColor"]      = {"r": r, "g": g, "b": b}
 
-						# create new metadata
-						newShader["meta"]                    = dict()
-						newShader["meta"]["virtual"]         = True
-						newShader["meta"]["lightColor"]      = dict()
-						newShader["meta"]["lightColor"]["r"] = r
-						newShader["meta"]["lightColor"]["g"] = g
-						newShader["meta"]["lightColor"]["b"] = b
+							newShaders[shadername+"_"+colorName+"_"+intensityName] = newShader
+				else:
+					for intensityName, intensity in self.predefLights.items():
+						newShader = copy.deepcopy(shader)
+
 						newShader["meta"]["lightIntensity"]  = intensity
 
-						newShaders[shadername+"_"+colorName+"_"+intensityName] = newShader
+						newShaders[shadername+"_"+intensityName] = newShader
 
 				# remove addition map from original shader and append "_off" to its name
 				shader["addition"] = None
@@ -131,6 +155,7 @@ class TextureSet():
 
 		# add new shaders (adds back original shader under new name, without addition map)
 		self.mapping[setname].update(newShaders)
+
 
 	def __guessKeywords(self, setname):
 		"Guesses some keywords based on shader (meta)data."
@@ -153,19 +178,23 @@ class TextureSet():
 				"water":      ["water"],
 			}
 
+			# guess surfaceparms
 			for surfaceparm, words in surfaceparms.items():
 				for word in words:
 					if word in shadername:
 						shader["keywords"].setdefault("surfaceparm", set())
 						shader["keywords"]["surfaceparm"].add(surfaceparm)
 
+			# remove the keywords dict if it's empty
 			if len(shader["keywords"]) == 0:
 				shader.pop("keywords")
+
 
 	def generateSet(self, path, setname = None, cutextension = None):
 		"Generates shader data for a given texture source folder."
 		root = os.path.basename(os.path.abspath(path+os.path.sep+os.path.pardir))
 
+		# generate the set name
 		if not setname:
 			if cutextension and len(cutextension) > 0:
 				setname = root+"/"+os.path.basename(os.path.abspath(path)).rsplit(cutextension)[0]
@@ -174,37 +203,45 @@ class TextureSet():
 
 		self.mapping.setdefault(setname, dict())
 
-		maplist = [os.path.splitext(filename)[0] for filename in os.listdir(path)] # filenames without extension
-		maps    = dict() # map type -> set of filenames without extentions
+		filelist   = os.listdir(path)
+		mapsbytype = dict() # map type -> set of filenames without extentions
+		mapext     = dict() # map name (no extension) -> map filename (with extension)
 
 		# retrieve all maps by type
-		for map_ in maplist:
-			for (maptype, suffix) in self.suffixes.items():
-				maps.setdefault(maptype, set())
+		for filename in filelist:
+			mapname, ext = os.path.splitext(filename)
 
-				if map_.endswith(suffix):
-					maps[maptype].add(map_)
+			for (maptype, suffix) in self.suffixes.items():
+				mapsbytype.setdefault(maptype, set())
+
+				if mapname.endswith(suffix):
+					mapext[mapname] = ext
+					mapsbytype[maptype].add(mapname)
 
 		# add a shader for each diffuse map
-		for diffusemap in maps["diffuse"]:
-			shadername = diffusemap.rsplit(self.suffixes["diffuse"])[0]
+		for diffusename in mapsbytype["diffuse"]:
+			shadername = diffusename.rsplit(self.suffixes["diffuse"])[0]
 			shader     = self.mapping[setname][shadername] = dict()
 
-			shader["diffuse"]         = diffusemap
+			shader["diffuse"]         = diffusename
+			shader["diffuseExt"]      = mapext[diffusename]
+
 			shader["path"]            = root+"/"+os.path.basename(os.path.abspath(path))
+			shader["abspath"]         = path
+
 			shader["meta"]            = dict()
-			shader["meta"]["virtual"] = False
 
 			# attempt to find a map of every known non-diffuse type
-			# assumes that non-diffuse maps have the same name as the diffuse or form a start of it, prefers longer names
+			# assumes that non-diffuse map names form the start of diffuse map names, prefers longer names
 			for maptype, suffix in self.suffixes.items():
 				basename = shadername
 
 				while basename != "":
 					mapname = basename+suffix
 
-					if mapname in maps[maptype]:
-						self.mapping[setname][shadername][maptype] = mapname
+					if mapname in mapsbytype[maptype]:
+						shader[maptype]       = mapname
+						shader[maptype+"Ext"] = mapext[mapname]
 						break
 
 					basename = basename[:-1]
@@ -212,16 +249,23 @@ class TextureSet():
 				if basename == "": # no map of this type found
 					self.mapping[setname][shadername][maptype] = None
 
+			# retrieve more metadata from the maps
+			self.__analyzeMaps(shader)
+
+		# expand relevant shaders into multiple light emitting ones
 		self.__expandLightShaders(setname)
 
+		# attempt to guess keywords based on clues
 		if self.guessKeywords:
 			self.__guessKeywords(setname)
 
 		print("Added set "+setname+" with "+str(len(self.mapping[setname]))+" shaders.", file = sys.stderr)
 
+
 	def clearSets(self):
 		"Forgets about all shader data that has been generated."
 		self.mapping.clear()
+
 
 	def __radToAdd(self, r, g = None, b = None):
 		"Given light colors, return modified colors to be used in the blend phase of the addition map."
@@ -229,6 +273,7 @@ class TextureSet():
 			return (r**self.radToAddExp, g**self.radToAddExp, b**self.radToAddExp)
 		else:
 			return r**self.radToAddExp
+
 
 	def getShader(self):
 		"Assembles and returns the shader file content."
@@ -254,6 +299,7 @@ class TextureSet():
 				shader = self.mapping[setname][shadername]
 				path   = shader["path"]+"/"
 
+				# decide on a preview image
 				if shader["preview"]:
 					preview = shader["preview"]
 				elif shader["diffuse"]:
@@ -261,19 +307,19 @@ class TextureSet():
 				else:
 					preview = None
 
+				# extract light color if available
 				if "lightColor" in shader["meta"]:
 					r = shader["meta"]["lightColor"]["r"] / 0xff
 					g = shader["meta"]["lightColor"]["g"] / 0xff
 					b = shader["meta"]["lightColor"]["b"] / 0xff
-				else:
-					r = g = b = None
 
-				# assemble shader entry
 				content += "\n"+setname+"/"+shadername+"\n{\n"
 
+				# preview image
 				if preview:
 					content += "\tqer_editorImage     "+path+preview+"\n\n"
 
+				# keywords
 				if "keywords" in shader:
 					for key, value in shader["keywords"].items():
 						if hasattr(value, "__iter__"):
@@ -283,14 +329,26 @@ class TextureSet():
 							content += "\t"+key+" "*max(1, 20-len(key))+str(value)+"\n"
 					content += "\n"
 
-				if "lightIntensity" in shader["meta"] and shader["meta"]["lightIntensity"] > 0 \
-				   and "lightColor" in shader["meta"]:
+				# surface light
+				if "lightIntensity" in shader["meta"] and shader["meta"]["lightIntensity"] > 0:
+					# intensity
 					content += "\tq3map_surfacelight  "+"%d" % shader["meta"]["lightIntensity"]+"\n"
-					content += "\tq3map_lightRGB      "+"%.2f %.2f %.2f" % (r, g, b)+"\n\n"
 
+					# color
+					if "lightColor" in shader["meta"]:
+						content += "\tq3map_lightRGB      "+"%.2f %.2f %.2f" % (r, g, b)+"\n\n"
+					elif shader["addition"]:
+						content += "\tq3map_lightImage    "+shader["addition"]+"\n\n"
+					elif shader["diffuse"]:
+						content += "\tq3map_lightImage    "+shader["diffuse"]+"\n\n"
+					else:
+						content += "\tq3map_lightRGB      1.00 1.00 1.00\n\n"
+
+				# diffuse map
 				if shader["diffuse"]:
 					content += "\tdiffuseMap          "+path+shader["diffuse"]+"\n"
 
+				# normal & height map
 				if shader["normal"]:
 					if shader["height"] and self.heightNormalsMod > 0:
 						content += "\tnormalMap           addnormals ( "+path+shader["normal"]+\
@@ -300,9 +358,11 @@ class TextureSet():
 				elif shader["height"] and self.heightNormalsMod > 0:
 					content += "\tnormalMap           heightmap ( "+path+shader["height"]+", "+"%.2f" % self.heightNormalsMod+" )\n"
 
+				# specular map
 				if shader["specular"]:
 					content += "\tspecularMap         "+path+shader["specular"]+"\n"
 
+				# addition map
 				if shader["addition"]:
 					content += "\n\t{\n"+\
 							   "\t\tmap   "+path+shader["addition"]+"\n"+\
@@ -321,81 +381,99 @@ class TextureSet():
 
 
 if __name__ == "__main__":
-	parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-	                                 description="Generates XreaL/Daemon shader files from directories of texture maps.")
+	p = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+	                            description="Generates XreaL/Daemon shader files from directories of texture maps.")
 
-	parser.add_argument("pathes", metavar="PATH", nargs="+",
-	                    help="Path to a source directory that should be added to the set")
+	p.add_argument("pathes", metavar="PATH", nargs="+",
+	               help="Path to a source directory that should be added to the set")
 
-	parser.add_argument("-d", "--diff", metavar="SUF", default="_d",
-	                    help="Suffix used by diffuse maps")
+	p.add_argument("-m", "--height-normals", metavar="MOD", type=float, default=1.0,
+	               help="Modifier used for generating normals from a heightmap")
 
-	parser.add_argument("-n", "--normal", metavar="SUF", default="_n",
-	                    help="Suffix used by normal maps")
+	p.add_argument("-g", "--guess", action="store_true",
+	               help="Guess additional keywords based on shader (meta)data")
 
-	parser.add_argument("-z", "--height", metavar="SUF", default="_h",
-	                    help="Suffix used by height maps")
+	# Texture map suffixes
+	g = p.add_argument_group("Texture map suffixes")
 
-	parser.add_argument("-s", "--spec", metavar="SUF", default="_s",
-	                    help="Suffix used by specular maps")
+	g.add_argument("-d", "--diff", metavar="SUF", default="_d",
+	               help="Suffix used by diffuse maps")
 
-	parser.add_argument("-a", "--add", metavar="SUF", default="_a",
-	                    help="Suffix used by addition/glow maps")
+	g.add_argument("-n", "--normal", metavar="SUF", default="_n",
+	               help="Suffix used by normal maps")
 
-	parser.add_argument("-p", "--prev", metavar="SUF", default="_p",
-	                    help="Suffix used by preview images")
+	g.add_argument("-z", "--height", metavar="SUF", default="_h",
+	               help="Suffix used by height maps")
 
-	parser.add_argument("-c", "--colors", metavar="NAME:COLOR", nargs="+", default=["white:ffffff"],
-	                    help="Add light colors with the given name, using a RGB hex triplet")
+	g.add_argument("-s", "--spec", metavar="SUF", default="_s",
+	               help="Suffix used by specular maps")
 
-	parser.add_argument("-i", "--intensities", metavar="VALUE", type=int, nargs="+", default=[1000,2000,5000],
-	                    help="Add light intensities")
+	g.add_argument("-a", "--add", metavar="SUF", default="_a",
+	               help="Suffix used by addition/glow maps")
 
-	parser.add_argument("-e", "--exp", metavar="EXP", type=float, default=1.0,
-	                    help="Exponent used to transform light color channels for use in the addition map blend phase")
+	g.add_argument("-p", "--prev", metavar="SUF", default="_p",
+	               help="Suffix used by preview images")
 
-	parser.add_argument("-m", "--heightnormals", metavar="MOD", type=float, default=1.0,
-	                    help="Modifier used for generating normals from a heightmap")
+	# Light emitting shaders
+	g = p.add_argument_group("Light emitting shaders")
 
-	parser.add_argument("-g", "--guess", action="store_true",
-	                    help="Guess additional keywords based on shader (meta)data")
+	g.add_argument("-c", "--colors", metavar="NAME:COLOR", nargs="+", default=["white:ffffff"],
+	               help="Add light colors with the given name, using a RGB hex triplet. "
+	                    "They will only be used in combination with grayscale addition maps.")
 
-	parser.add_argument("-o", "--out", metavar="DEST", type=argparse.FileType("w"),
-	                    help="write shader to this file")
+	g.add_argument("-l", "--custom-lights", metavar="VALUE", type=int, nargs="+", default=[1000,2000,5000],
+	               help="Add light intensities for light emitting shaders with custom colors (grayscale addition map)")
 
-	parser.add_argument("-r", "--root",
-	                    help="Force set root to this, by default the last two directories of the source pathes are used")
+	g.add_argument("-i", "--predefined-lights", metavar="VALUE", type=int, nargs="+", default=[0,200],
+	               help="Add light intensities for light emitting shaders with predefined colors (non-grayscale addition map)")
 
-	parser.add_argument("-x", "--strip", metavar="SUF", default="_src",
-	                    help="Strip suffix from source folder names when generating the set name")
+	g.add_argument("-e", "--color-blend-exp", metavar="VALUE", type=float, default=1.0,
+	               help="Exponent used to transform custom light color channels for use in the addition map blend phase")
 
-	parser.add_argument("-t", "--header", metavar="FILE", type=argparse.FileType("r"),
-	                    help="Use file content as a header, \"// \" will be prepended to each line")
+	# Input & Output
+	g = p.add_argument_group("Input & Output")
 
-	args = parser.parse_args()
+	g.add_argument("-r", "--root",
+	               help="Sets the namespace for the set (e.g. textures/setname). "
+	                    "Can be used to merge source folders into a single set.")
 
-	ts = TextureSet(radToAddExponent = args.exp, heightNormalsMod = args.heightnormals, guessKeywords = args.guess)
+	g.add_argument("-x", "--strip", metavar="SUF", default="_src",
+	               help="Strip suffix from source folder names when generating the set name")
 
-	ts.setSuffixes(diffuse = args.diff, normal = args.normal, height = args.height,
-	               specular = args.spec, addition = args.add, preview = args.prev)
+	g.add_argument("-t", "--header", metavar="FILE", type=argparse.FileType("r"),
+	               help="Use file content as a header, \"// \" will be prepended to each line")
 
-	if args.header:
-		ts.setHeader(args.header.read())
-		args.header.close()
+	g.add_argument("-o", "--out", metavar="DEST", type=argparse.FileType("w"),
+	               help="Write shader to this file")
 
-	for (name, color) in [item.split(":") for item in args.colors]:
+	a = p.parse_args()
+
+	ts = TextureSet(radToAddExponent = a.color_blend_exp, heightNormalsMod = a.height_normals,
+	                guessKeywords = a.guess)
+
+	ts.setSuffixes(diffuse = a.diff, normal = a.normal, height = a.height,
+	               specular = a.spec, addition = a.add, preview = a.prev)
+
+	if a.header:
+		ts.setHeader(a.header.read())
+		a.header.close()
+
+	for (name, color) in [item.split(":") for item in a.colors]:
 		ts.addLightColor(name, color)
 
-	for intensity in args.intensities:
-		ts.addLightIntensity(intensity)
+	for intensity in a.custom_lights:
+		ts.addCustomLightIntensity(intensity)
 
-	for path in args.pathes:
-		ts.generateSet(path, setname = args.root, cutextension = args.strip)
+	for intensity in a.predefined_lights:
+		ts.addPredefLightIntensity(intensity)
+
+	for path in a.pathes:
+		ts.generateSet(path, setname = a.root, cutextension = a.strip)
 
 	shader = ts.getShader()
 
-	if args.out:
-		args.out.write(shader)
-		args.out.close()
+	if a.out:
+		a.out.write(shader)
+		a.out.close()
 	else:
 		print(shader)
