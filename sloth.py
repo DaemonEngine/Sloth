@@ -310,7 +310,7 @@ if __name__ == "__main__":
 	parser.add_argument("-c", "--colors", metavar="NAME:COLOR", nargs="+", default=["white:ffffff"],
 	                    help="Add light colors with the given name, using a RGB hex triplet")
 
-	parser.add_argument("-i", "--intensities", metavar="VALUE", type=int, nargs="+", default=[0,1000,2000,5000],
+	parser.add_argument("-i", "--intensities", metavar="VALUE", type=int, nargs="+", default=[1000,2000,5000],
 	                    help="Add light intensities")
 
 	parser.add_argument("-e", "--exp", metavar="EXP", type=float, default=1.0,
