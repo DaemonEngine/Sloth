@@ -21,13 +21,14 @@ import sys, os, re, argparse
 class TextureSet():
 	colorRE = re.compile("^[0-9a-f]{6}$")
 
-	def __init__(self, radToAddExponent = 1.0):
+	def __init__(self, radToAddExponent = 1.0, heightNormalsMod = 1.0):
 		self.header           = ""
 		self.suffixes         = dict() # map type -> suffix
 		self.lightColors      = dict() # color name -> RGB color triple
 		self.lightIntensities = dict() # intensity name -> intensity
 		self.mapping          = dict() # set name -> shader name -> key -> value
 		self.radToAddExp      = radToAddExponent # used to convert radiosity RGB values into addition map colors
+		self.heightNormalsMod = heightNormalsMod # used when generating normals from height maps
 
 		# set default suffixes
 		self.setSuffixes()
@@ -36,10 +37,11 @@ class TextureSet():
 		"Sets a header text to be put at the top of the shader file."
 		self.header = text
 
-	def setSuffixes(self, diffuse = "_d", normal = "_n", specular = "_s", addition = "_a", preview = "_p"):
+	def setSuffixes(self, diffuse = "_d", normal = "_n", height = "_h", specular = "_s", addition = "_a", preview = "_p"):
 		"Sets the filename suffixes for the different texture map types."
 		self.suffixes["diffuse"]  = diffuse
 		self.suffixes["normal"]   = normal
+		self.suffixes["height"]   = height
 		self.suffixes["specular"] = specular
 		self.suffixes["addition"] = addition
 		self.suffixes["preview"]  = preview
@@ -263,7 +265,13 @@ class TextureSet():
 					content += "\tdiffuseMap         "+path+shader["diffuse"]+"\n"
 
 				if shader["normal"]:
-					content += "\tnormalMap          "+path+shader["normal"]+"\n"
+					if shader["height"] and self.heightNormalsMod > 0:
+						content += "\tnormalMap          addnormals ( "+path+shader["normal"]+\
+						           ", heightmap ( "+path+shader["height"]+", "+"%.2f" % self.heightNormalsMod+" ) )\n"
+					else:
+						content += "\tnormalMap          "+path+shader["normal"]+"\n"
+				elif shader["height"] and self.heightNormalsMod > 0:
+					content += "\tnormalMap          heightmap ( "+path+shader["height"]+", "+"%.2f" % self.heightNormalsMod+" )\n"
 
 				if shader["specular"]:
 					content += "\tspecularMap        "+path+shader["specular"]+"\n"
@@ -298,6 +306,9 @@ if __name__ == "__main__":
 	parser.add_argument("-n", "--normal", metavar="SUF", default="_n",
 	                    help="Suffix used by normal maps")
 
+	parser.add_argument("-z", "--height", metavar="SUF", default="_h",
+	                    help="Suffix used by height maps")
+
 	parser.add_argument("-s", "--spec", metavar="SUF", default="_s",
 	                    help="Suffix used by specular maps")
 
@@ -316,6 +327,9 @@ if __name__ == "__main__":
 	parser.add_argument("-e", "--exp", metavar="EXP", type=float, default=1.0,
 	                    help="Exponent used to transform light color channels for use in the addition map blend phase")
 
+	parser.add_argument("-m", "--heightnormals", metavar="MOD", type=float, default=1.0,
+	                    help="Modifier used for generating normals from a heightmap")
+
 	parser.add_argument("-o", "--out", metavar="DEST", type=argparse.FileType("w"),
 	                    help="write shader to this file")
 
@@ -330,9 +344,10 @@ if __name__ == "__main__":
 
 	args = parser.parse_args()
 
-	ts = TextureSet(radToAddExponent = args.exp)
+	ts = TextureSet(radToAddExponent = args.exp, heightNormalsMod = args.heightnormals)
 
-	ts.setSuffixes(args.diff, args.normal, args.spec, args.add, args.prev)
+	ts.setSuffixes(diffuse = args.diff, normal = args.normal, height = args.height,
+	               specular = args.spec, addition = args.add, preview = args.prev)
 
 	if args.header:
 		ts.setHeader(args.header.read())
