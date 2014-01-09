@@ -72,11 +72,6 @@ class TextureSet():
 
 		if intensity >= 10000:
 			name = str(int(intensity / 1000)) + "k"
-		elif intensity >= 1000:
-			if (intensity % 1000) < 50:
-				name = str(int(intensity / 1000)) + "k"
-			else:
-				name = ("%.1f" % (intensity / 1000)) + "k"
 		elif intensity == 0:
 			name = "norad"
 		else:
