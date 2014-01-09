@@ -301,7 +301,7 @@ class TextureSet():
 						content += "\tnormalMap           addnormals ( "+path+shader["normal"]+\
 						           ", heightmap ( "+path+shader["height"]+", "+"%.2f" % self.heightNormalsMod+" ) )\n"
 					else:
-						content += "\tnormalMap          "+path+shader["normal"]+"\n"
+						content += "\tnormalMap           "+path+shader["normal"]+"\n"
 				elif shader["height"] and self.heightNormalsMod > 0:
 					content += "\tnormalMap           heightmap ( "+path+shader["height"]+", "+"%.2f" % self.heightNormalsMod+" )\n"
 
