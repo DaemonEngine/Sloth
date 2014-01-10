@@ -24,25 +24,73 @@ class TextureSet():
 
 	colorRE = re.compile("^[0-9a-f]{6}$")
 
+	# mapping from surfaceparm values to words that trigger their use
+	surfaceparms = \
+	{
+		"donotenter": ["lava", "slime"],
+		"dust":       ["sand", "dust"],
+		"flesh":      ["flesh", "meat", "organ"],
+		"ladder":     ["ladder"],
+		"lava":       ["lava"],
+		"metalsteps": ["metal", "steel", "iron", "tread", "grate"],
+		"slick":      ["ice"],
+		"slime":      ["slime"],
+		"water":      ["water"],
+	}
+
 
 	def __init__(self, radToAddExponent = 1.0, heightNormalsMod = 1.0, guessKeywords = False):
-		self.header           = ""
 		self.suffixes         = dict() # map type -> suffix
 		self.lightColors      = dict() # color name -> RGB color triple
-		self.customLights     = dict() # intensity name -> intensity
-		self.predefLights     = dict() # intensity name -> intensity
+		self.customLights     = dict() # intensity name -> intensity; for grayscale addition maps
+		self.predefLights     = dict() # intensity name -> intensity; for non-grayscale addition maps
 		self.mapping          = dict() # set name -> shader name -> key -> value
-		self.radToAddExp      = radToAddExponent # used to convert radiosity RGB values into addition map colors
-		self.heightNormalsMod = heightNormalsMod # used when generating normals from height maps
-		self.guessKeywords    = guessKeywords    # try to guess keywords based on shader (meta)data
 
-		# set default suffixes
+		# set defaults
+		self.header           = ""     # header to be prepended to output
+		self.guessKeywords    = False  # whether to try to guess additional keywords based on shader (meta)data
+		self.radToAddExp      = 1.0    # exponent used to convert radiosity RGB values into addition map color modifiers
+		self.heightNormalsMod = 1.0    # modifier used when generating normals from height maps
+		self.alphaTest        = None   # whether to use an alphaFunc/alphaTest keyword or smooth blending (default)
+		self.alphaShadows     = True   # whether to add the alphashadows surfaceparm keyword to relevant shaders
 		self.setSuffixes()
 
 
 	def setHeader(self, text):
 		"Sets a header text to be put at the top of the shader file."
 		self.header = text
+
+
+	def setKeywordGuessing(self, value = True):
+		"Whether to try to guess additional keywords based on shader (meta)data"
+		self.guessKeywords = value
+
+
+	def setRadToAddExponent(self, value):
+		"Set the exponent used to convert radiosity RGB values into addition map color modifiers"
+		self.radToAddExp = value
+
+
+	def setHeightNormalsMod(self, value):
+		"Set the modifier used when generating normals from height maps"
+		self.heightNormalsMod = value
+
+
+	def setAlphaTest(self, test):
+		"Set the alpha test method used, blend smoothly if None."
+		if type(test) == float and 0 <= test <= 1:
+			self.alphaTest = test
+		elif type(test) == str and test in ("GT0", "GE128", "LT128"):
+			self.alphaTest = test
+		elif test == None:
+			self.alphaTest = None
+		else:
+			print("Alpha test must be either None, a valid string or a float between 0 and 1.", file = sys.stderr)
+
+
+	def setAlphaShadows(self, value = True):
+		"Whether to add the alphashadows surfaceparm keyword to relevant shaders"
+		self.alphaShadows = value
 
 
 	def setSuffixes(self, diffuse = "_d", normal = "_n", height = "_h", specular = "_s", addition = "_a", preview = "_p"):
@@ -156,38 +204,31 @@ class TextureSet():
 		# add new shaders (adds back original shader under new name, without addition map)
 		self.mapping[setname].update(newShaders)
 
+	def __addKeywords(self, shader):
+		"Adds keywords based on knowledge (and potentially assumptions) about the shader (meta)data."
+		shader.setdefault("keywords", dict())
 
-	def __guessKeywords(self, setname):
-		"Guesses some keywords based on shader (meta)data."
-		for shadername in self.mapping[setname]:
-			shader = self.mapping[setname][shadername]
+		# transparent diffuse map
+		if shader["meta"]["diffuseAlpha"]:
+			shader["keywords"]["cull"] = "none"
 
-			shader.setdefault("keywords", dict())
+			if self.alphaTest:
+				if type(self.alphaTest) == str:
+					shader["keywords"]["alphaFunc"] = self.alphaTest
+				else:
+					shader["keywords"]["alphaTest"] = "%.2f" % self.alphaTest
 
-			# mapping from surfaceparm values to words that trigger their use
-			surfaceparms = \
-			{
-				"donotenter": ["lava", "slime"],
-				"dust":       ["sand", "dust"],
-				"flesh":      ["flesh", "meat", "organ"],
-				"ladder":     ["ladder"],
-				"lava":       ["lava"],
-				"metalsteps": ["metal", "steel", "iron", "tread", "grate"],
-				"slick":      ["ice"],
-				"slime":      ["slime"],
-				"water":      ["water"],
-			}
+			if self.alphaShadows:
+				shader["keywords"].setdefault("surfaceparm", set())
+				shader["keywords"]["surfaceparm"].add("alphashadows")
 
+		if self.guessKeywords:
 			# guess surfaceparms
-			for surfaceparm, words in surfaceparms.items():
+			for surfaceparm, words in self.surfaceparms.items():
 				for word in words:
-					if word in shadername:
+					if word in shader["name"]:
 						shader["keywords"].setdefault("surfaceparm", set())
 						shader["keywords"]["surfaceparm"].add(surfaceparm)
-
-			# remove the keywords dict if it's empty
-			if len(shader["keywords"]) == 0:
-				shader.pop("keywords")
 
 
 	def generateSet(self, path, setname = None, cutextension = None):
@@ -223,11 +264,12 @@ class TextureSet():
 			shadername = diffusename.rsplit(self.suffixes["diffuse"])[0]
 			shader     = self.mapping[setname][shadername] = dict()
 
-			shader["diffuse"]         = diffusename
-			shader["diffuseExt"]      = mapext[diffusename]
-
+			shader["name"]            = shadername
 			shader["path"]            = root+"/"+os.path.basename(os.path.abspath(path))
 			shader["abspath"]         = path
+
+			shader["diffuse"]         = diffusename
+			shader["diffuseExt"]      = mapext[diffusename]
 
 			shader["meta"]            = dict()
 
@@ -252,14 +294,17 @@ class TextureSet():
 			# retrieve more metadata from the maps
 			self.__analyzeMaps(shader)
 
+			# now that we have enough knowledge about the shader, add keywords
+			self.__addKeywords(shader)
+
+		numVariants = str(len(self.mapping[setname]))
+
 		# expand relevant shaders into multiple light emitting ones
 		self.__expandLightShaders(setname)
 
-		# attempt to guess keywords based on clues
-		if self.guessKeywords:
-			self.__guessKeywords(setname)
+		numShaders = str(len(self.mapping[setname]))
 
-		print("Added set "+setname+" with "+str(len(self.mapping[setname]))+" shaders.", file = sys.stderr)
+		print(setname+": Added "+numShaders+" shaders for "+numVariants+" texture variants.", file = sys.stderr)
 
 
 	def clearSets(self):
@@ -275,7 +320,7 @@ class TextureSet():
 			return r**self.radToAddExp
 
 
-	def getShader(self):
+	def getShader(self, setname = None, shadername = None):
 		"Assembles and returns the shader file content."
 		content = ""
 
@@ -285,14 +330,28 @@ class TextureSet():
 			else:
 				content += "// "+line+"\n"
 
-		for setname in self.mapping:
-			content += "\n"+\
-			           "// "+"-"*len(setname)+"\n"+\
-			           "// "+setname+"\n"+\
-			           "// "+"-"*len(setname)+"\n"
+		if setname:
+			if setname in self.mapping:
+				setnames = (setname, )
+			else:
+				print("Unknown set "+str(setname)+".", file = sys.stderr)
+				return
+		else:
+			setnames = self.mapping.keys()
 
-			names = list(self.mapping[setname].keys())
-			names.sort()
+		for setname in setnames:
+			if shadername:
+				if shadername in self.mapping[setname]:
+					names = (shadername, )
+				else:
+					continue
+			else:
+				content += "\n"+\
+				           "// "+"-"*len(setname)+"\n"+\
+				           "// "+setname+"\n"+\
+				           "// "+"-"*len(setname)+"\n"
+
+				names = sorted(self.mapping[setname].keys())
 
 			for shadername in names:
 				# prepare content
@@ -320,10 +379,10 @@ class TextureSet():
 					content += "\tqer_editorImage     "+path+preview+"\n\n"
 
 				# keywords
-				if "keywords" in shader:
-					for key, value in shader["keywords"].items():
-						if hasattr(value, "__iter__"):
-							for value in value:
+				if "keywords" in shader and len(shader["keywords"]) > 0:
+					for key, value in sorted(shader["keywords"].items()):
+						if type(value) != str and hasattr(value, "__iter__"):
+							for value in sorted(value):
 								content += "\t"+key+" "*max(1, 20-len(key))+str(value)+"\n"
 						else:
 							content += "\t"+key+" "*max(1, 20-len(key))+str(value)+"\n"
@@ -346,7 +405,13 @@ class TextureSet():
 
 				# diffuse map
 				if shader["diffuse"]:
-					content += "\tdiffuseMap          "+path+shader["diffuse"]+"\n"
+					if shader["meta"]["diffuseAlpha"] and not self.alphaTest:
+						content += "\t{\n"+\
+						           "\t\tmap   "+path+shader["diffuse"]+"\n"+\
+						           "\t\tblend blend\n"+\
+						           "\t}\n"
+					else:
+						content += "\tdiffuseMap          "+path+shader["diffuse"]+"\n"
 
 				# normal & height map
 				if shader["normal"]:
@@ -364,7 +429,7 @@ class TextureSet():
 
 				# addition map
 				if shader["addition"]:
-					content += "\n\t{\n"+\
+					content += "\t{\n"+\
 							   "\t\tmap   "+path+shader["addition"]+"\n"+\
 							   "\t\tblend add\n"
 					if "lightColor" in shader["meta"]:
@@ -381,17 +446,18 @@ class TextureSet():
 
 
 if __name__ == "__main__":
+	# parse command line options
 	p = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 	                            description="Generates XreaL/Daemon shader files from directories of texture maps.")
 
 	p.add_argument("pathes", metavar="PATH", nargs="+",
 	               help="Path to a source directory that should be added to the set")
 
-	p.add_argument("-m", "--height-normals", metavar="MOD", type=float, default=1.0,
-	               help="Modifier used for generating normals from a heightmap")
-
 	p.add_argument("-g", "--guess", action="store_true",
 	               help="Guess additional keywords based on shader (meta)data")
+
+	p.add_argument("--height-normals", metavar="VALUE", type=float, default=1.0,
+	               help="Modifier used for generating normals from a heightmap")
 
 	# Texture map suffixes
 	g = p.add_argument_group("Texture map suffixes")
@@ -421,23 +487,43 @@ if __name__ == "__main__":
 	               help="Add light colors with the given name, using a RGB hex triplet. "
 	                    "They will only be used in combination with grayscale addition maps.")
 
-	g.add_argument("-l", "--custom-lights", metavar="VALUE", type=int, nargs="+", default=[1000,2000,5000],
+	g.add_argument("-l", "--custom-lights", metavar="VALUE", type=int, nargs="+", default=[1000,2000,4000],
 	               help="Add light intensities for light emitting shaders with custom colors (grayscale addition map)")
 
 	g.add_argument("-i", "--predefined-lights", metavar="VALUE", type=int, nargs="+", default=[0,200],
 	               help="Add light intensities for light emitting shaders with predefined colors (non-grayscale addition map)")
 
-	g.add_argument("-e", "--color-blend-exp", metavar="VALUE", type=float, default=1.0,
-	               help="Exponent used to transform custom light color channels for use in the addition map blend phase")
+	g.add_argument("--color-blend-exp", metavar="VALUE", type=float, default=1.0,
+	               help="Exponent applied to custom light color channels for use in the addition map blend phase")
+
+	# Alpha blending
+	g = p.add_argument_group("Alpha blending")
+	gm = g.add_mutually_exclusive_group()
+
+	gm.add_argument("--gt0", action="store_true",
+	               help="Use alphaFunc GT0 instead of smooth alpha blending.")
+
+	gm.add_argument("--ge128", action="store_true",
+	               help="Use alphaFunc GE128 instead of smooth alpha blending.")
+
+	gm.add_argument("--lt128", action="store_true",
+	               help="Use alphaFunc LT128 instead of smooth alpha blending.")
+
+	gm.add_argument("--alpha-test", metavar="VALUE", type=float,
+	               help="Use alphaTest instead of smooth alpha blending.")
+
+	g.add_argument("--no-alpha-shadows", action="store_true",
+	               help="Don't add the alphashadows surfaceparm.")
 
 	# Input & Output
 	g = p.add_argument_group("Input & Output")
+	gm = g.add_mutually_exclusive_group()
 
-	g.add_argument("-r", "--root",
+	gm.add_argument("-r", "--root",
 	               help="Sets the namespace for the set (e.g. textures/setname). "
 	                    "Can be used to merge source folders into a single set.")
 
-	g.add_argument("-x", "--strip", metavar="SUF", default="_src",
+	gm.add_argument("-x", "--strip", metavar="SUF", default="_src",
 	               help="Strip suffix from source folder names when generating the set name")
 
 	g.add_argument("-t", "--header", metavar="FILE", type=argparse.FileType("r"),
@@ -448,11 +534,16 @@ if __name__ == "__main__":
 
 	a = p.parse_args()
 
-	ts = TextureSet(radToAddExponent = a.color_blend_exp, heightNormalsMod = a.height_normals,
-	                guessKeywords = a.guess)
+	# init generator
+	ts = TextureSet()
 
 	ts.setSuffixes(diffuse = a.diff, normal = a.normal, height = a.height,
 	               specular = a.spec, addition = a.add, preview = a.prev)
+
+	ts.setKeywordGuessing(a.guess)
+	ts.setRadToAddExponent(a.color_blend_exp)
+	ts.setHeightNormalsMod(a.height_normals)
+	ts.setAlphaShadows(not a.no_alpha_shadows)
 
 	if a.header:
 		ts.setHeader(a.header.read())
@@ -467,9 +558,20 @@ if __name__ == "__main__":
 	for intensity in a.predefined_lights:
 		ts.addPredefLightIntensity(intensity)
 
+	if a.alpha_test:
+		ts.setAlphaTest(a.alpha_test)
+	elif a.gt0:
+		ts.setAlphaTest("GT0")
+	elif a.ge128:
+		ts.setAlphaTest("GE128")
+	elif a.lt128:
+		ts.setAlphaTest("LT128")
+
+	# generate
 	for path in a.pathes:
 		ts.generateSet(path, setname = a.root, cutextension = a.strip)
 
+	# output
 	shader = ts.getShader()
 
 	if a.out:
