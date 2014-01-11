@@ -15,17 +15,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import sys, os, re, argparse, copy
+import sys, os, re, argparse, copy, configparser
 
 from PIL import Image
 
 
-class TextureSet():
+class ShaderGenerator(dict):
 
+	# valid color format
 	colorRE = re.compile("^[0-9a-f]{6}$")
 
-	# mapping from surfaceparm values to words that trigger their use
-	surfaceparms = \
+	# mapping from surfaceparm values to words that trigger their use when keyword guessing is enabled
+	surfaceParms = \
 	{
 		"donotenter": ["lava", "slime"],
 		"dust":       ["sand", "dust"],
@@ -38,59 +39,39 @@ class TextureSet():
 		"water":      ["water"],
 	}
 
+	# extension for (per-shader) option files
+	slothFileExt     = ".sloth"
 
-	def __init__(self, radToAddExponent = 1.0, heightNormalsMod = 1.0, guessKeywords = False):
-		self.suffixes         = dict() # map type -> suffix
-		self.lightColors      = dict() # color name -> RGB color triple
-		self.customLights     = dict() # intensity name -> intensity; for grayscale addition maps
-		self.predefLights     = dict() # intensity name -> intensity; for non-grayscale addition maps
-		self.mapping          = dict() # set name -> shader name -> key -> value
+	# basename of the per-set option file
+	defaultSlothFile = "options"+slothFileExt
 
-		# set defaults
+
+	def __init__(self):
+		self.sets             = dict() # set name -> shader name -> key -> value
 		self.header           = ""     # header to be prepended to output
-		self.guessKeywords    = False  # whether to try to guess additional keywords based on shader (meta)data
-		self.radToAddExp      = 1.0    # exponent used to convert radiosity RGB values into addition map color modifiers
-		self.heightNormalsMod = 1.0    # modifier used when generating normals from height maps
-		self.alphaTest        = None   # whether to use an alphaFunc/alphaTest keyword or smooth blending (default)
-		self.alphaShadows     = True   # whether to add the alphashadows surfaceparm keyword to relevant shaders
+		self.suffixes         = dict() # map type -> suffix
 		self.setSuffixes()
+
+		# default options that can be overwritten on a per-folder/shader basis
+		self["options"]                     = dict()
+		self["options"]["lightColors"]      = dict() # color name -> RGB color triple
+		self["options"]["customLights"]     = dict() # intensity name -> intensity; for grayscale addition maps
+		self["options"]["predefLights"]     = dict() # intensity name -> intensity; for non-grayscale addition maps
+		self["options"]["guessKeywords"]    = False  # whether to try to guess additional keywords based on shader (meta)data
+		self["options"]["radToAddExp"]      = 1.0    # exponent used to convert radiosity RGB values into addition map color modifiers
+		self["options"]["heightNormalsMod"] = 1.0    # modifier used when generating normals from height maps
+		self["options"]["alphaTest"]        = None   # whether to use an alphaFunc/alphaTest keyword or smooth blending (default)
+		self["options"]["alphaShadows"]     = True   # whether to add the alphashadows surfaceparm keyword to relevant shaders
+
+
+	##################
+	# GLOBAL OPTIONS #
+	##################
 
 
 	def setHeader(self, text):
 		"Sets a header text to be put at the top of the shader file."
 		self.header = text
-
-
-	def setKeywordGuessing(self, value = True):
-		"Whether to try to guess additional keywords based on shader (meta)data"
-		self.guessKeywords = value
-
-
-	def setRadToAddExponent(self, value):
-		"Set the exponent used to convert radiosity RGB values into addition map color modifiers"
-		self.radToAddExp = value
-
-
-	def setHeightNormalsMod(self, value):
-		"Set the modifier used when generating normals from height maps"
-		self.heightNormalsMod = value
-
-
-	def setAlphaTest(self, test):
-		"Set the alpha test method used, blend smoothly if None."
-		if type(test) == float and 0 <= test <= 1:
-			self.alphaTest = test
-		elif type(test) == str and test in ("GT0", "GE128", "LT128"):
-			self.alphaTest = test
-		elif test == None:
-			self.alphaTest = None
-		else:
-			print("Alpha test must be either None, a valid string or a float between 0 and 1.", file = sys.stderr)
-
-
-	def setAlphaShadows(self, value = True):
-		"Whether to add the alphashadows surfaceparm keyword to relevant shaders"
-		self.alphaShadows = value
 
 
 	def setSuffixes(self, diffuse = "_d", normal = "_n", height = "_h", specular = "_s", addition = "_a", preview = "_p"):
@@ -103,8 +84,77 @@ class TextureSet():
 		self.suffixes["preview"]  = preview
 
 
-	def addLightColor(self, name, color):
-		"Adds a light color with a given name to be used for light emitting shaders."
+	######################
+	# PER-SHADER OPTIONS #
+	######################
+
+
+	def __setKeywordGuessing(self, value, shader = None):
+		if not shader:
+			shader = self
+
+		shader["options"]["guessKeywords"] = value
+
+	def setKeywordGuessing(self, value = True):
+		"Whether to try to guess additional keywords based on shader (meta)data"
+		self.__setKeywordGuessing(value)
+
+
+	def __setRadToAddExponent(self, value, shader = None):
+		if not shader:
+			shader = self
+
+		shader["options"]["radToAddExp"] = value
+
+	def setRadToAddExponent(self, value):
+		"Set the exponent used to convert radiosity RGB values into addition map color modifiers"
+		self.__setRadToAddExponent(value)
+
+
+	def __setHeightNormalsMod(self, value, shader = None):
+		if not shader:
+			shader = self
+
+		shader["options"]["heightNormalsMod"] = value
+
+	def setHeightNormalsMod(self, value):
+		"Set the modifier used when generating normals from height maps"
+		self.__setHeightNormalsMod(value)
+
+
+	def __setAlphaTest(self, test, shader = None):
+		if not shader:
+			shader = self
+
+		if type(test) == float and 0 <= test <= 1:
+			shader["options"]["alphaTest"] = test
+		elif type(test) == str and test in ("GT0", "GE128", "LT128"):
+			shader["options"]["alphaTest"] = test
+		elif test == None:
+			shader["options"]["alphaTest"] = None
+		else:
+			print("Alpha test must be either None, a valid string or a float between 0 and 1.", file = sys.stderr)
+
+	def setAlphaTest(self, test):
+		"Set the alpha test method used, blend smoothly if None."
+		self.__setAlphaTest(test)
+
+
+	def __setAlphaShadows(self, value, shader = None):
+		if not shader:
+			shader = self
+
+		shader["options"]["alphaShadows"] = value
+
+	def setAlphaShadows(self, value = True):
+		"Whether to add the alphashadows surfaceparm keyword to relevant shaders"
+		self.__setAlphaShadows(value)
+
+
+	def __addLightColor(self, name, color, shader = None):
+		if not shader:
+			shader = self
+
 		if not self.colorRE.match(color):
 			print("Not a valid color: "+color+". Format is [0-9][a-f]{6}.", file = sys.stderr)
 			return
@@ -113,14 +163,21 @@ class TextureSet():
 		g = int(color[2:4], 16)
 		b = int(color[4:6], 16)
 
-		if name in self.lightColors and (r, g, b) != self.lightColors[name]:
-			print("Overwriting light color "+name+": "+"%02x%02x%02x" % self.lightColors[name]+" -> "+color, file = sys.stderr)
+		if name in shader["options"]["lightColors"] and (r, g, b) != shader["options"]["lightColors"][name]:
+			print("Overwriting light color "+name+": "+"%02x%02x%02x" % shader["options"]["lightColors"][name]+\
+			      " -> "+color, file = sys.stderr)
 
-		self.lightColors[name] = (r, g, b)
+		shader["options"]["lightColors"][name] = (r, g, b)
+
+	def addLightColor(self, name, color):
+		"Adds a light color with a given name to be used for light emitting shaders."
+		self.__addLightColor(name, color)
 
 
-	def __addLightIntensity(self, intensity, custom):
-		"Adds a light intensity to be used for light emitting shaders."
+	def __addLightIntensity(self, intensity, custom, shader = None):
+		if not shader:
+			shader = self
+
 		intensity = int(intensity)
 
 		if intensity < 0:
@@ -135,31 +192,131 @@ class TextureSet():
 			name = str(intensity)
 
 		if custom:
-			self.customLights[name] = intensity
+			shader["options"]["customLights"][name] = intensity
 		else:
-			self.predefLights[name] = intensity
-
+			shader["options"]["predefLights"][name] = intensity
 
 	def addCustomLightIntensity(self, intensity):
+		"Adds a light intensity to be used for light emitting shaders with grayscale addition maps."
 		self.__addLightIntensity(intensity, True)
 
-
 	def addPredefLightIntensity(self, intensity):
+		"Adds a light intensity to be used for light emitting shaders with non-grayscale addition maps."
 		self.__addLightIntensity(intensity, False)
+
+
+	#################
+	# FUNCTIONALITY #
+	#################
+
+
+	def __copyOptions(self, source, target):
+		"Copies initial shader options."
+		target["options"] = copy.deepcopy(source["options"])
+
+
+	def __parseSlothFile(self, shader, path):
+		"Parses a per-shader option file."
+		config = configparser.ConfigParser()
+
+		# parse file
+		try:
+			with open(path, "r") as fp:
+				config.readfp(fp)
+		except IOError:
+			print("Couldn't read "+path+".", file = sys.stderr)
+			return
+		except configparser.ParsingError as error:
+			print("Sloth file "+path+" contains an error:\n"+str(error), file = sys.stderr)
+			return
+
+		print("Parsing per-folder options file: "+path, file = sys.stderr)
+
+		# parse options
+		if "light" in config:
+			options = config["light"]
+
+			if "colors" in options:
+				shader["options"]["lightColors"].clear()
+
+				for nameAndColor in options["colors"].split():
+					try:
+						name, color = nameAndColor.split(":")
+					except ValueError:
+						continue
+					self.__addLightColor(name, color, shader)
+
+			if "add_colors" in options:
+				for nameAndColor in options["add_colors"].split():
+					try:
+						name, color = nameAndColor.split(":")
+					except ValueError:
+						continue
+					self.__addLightColor(name, color, shader)
+
+			if "predef_lights" in options:
+				shader["options"]["predefLights"].clear()
+
+				for intensity in options["predef_lights"].split():
+					self.__addLightIntensity(int(intensity), False, shader)
+
+			if "add_predef_lights" in options:
+				for intensity in options["add_predef_lights"].split():
+					self.__addLightIntensity(int(intensity), False, shader)
+
+			if "custom_lights" in options:
+				shader["options"]["customLights"].clear()
+
+				for intensity in options["custom_lights"].split():
+					self.__addLightIntensity(int(intensity), True, shader)
+
+			if "add_custom_lights" in options:
+				for intensity in options["add_custom_lights"].split():
+					self.__addLightIntensity(int(intensity), True, shader)
+
+			if "color_blend_exp" in options:
+				self.__setRadToAddExponent(options["color_blend_exp"], shader)
 
 
 	def __analyzeMaps(self, shader):
 		"Retrieves metadata from a shader's maps, such as whether there's an alpha channel on the diffuse map."
 		# diffuse map
-		img = Image.open(shader["abspath"]+os.path.sep+shader["diffuse"]+shader["diffuseExt"], "r")
+		img = Image.open(shader["abspath"]+os.path.sep+shader["diffuse"]+shader["ext"]["diffuse"], "r")
 		shader["meta"]["diffuseAlpha"] = ( img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info) )
 
 		# addition map
 		if shader["addition"]:
-			img = Image.open(shader["abspath"]+os.path.sep+shader["addition"]+shader["additionExt"], "r")
+			img = Image.open(shader["abspath"]+os.path.sep+shader["addition"]+shader["ext"]["addition"], "r")
 			shader["meta"]["additionGrayscale"] = ( img.mode in ("L", "LA") )
 		else:
 			shader["meta"]["additionGrayscale"] = False
+
+
+	def __addKeywords(self, shader):
+		"Adds keywords based on knowledge (and potentially assumptions) about the shader (meta)data."
+		shader.setdefault("keywords", dict())
+
+		# transparent diffuse map
+		if shader["meta"]["diffuseAlpha"]:
+			shader["keywords"]["cull"] = "none"
+
+			if shader["options"]["alphaTest"]:
+				if type(shader["options"]["alphaTest"]) == str:
+					shader["keywords"]["alphaFunc"] = shader["options"]["alphaTest"]
+				else:
+					shader["keywords"]["alphaTest"] = "%.2f" % shader["options"]["alphaTest"]
+
+			if shader["options"]["alphaShadows"]:
+				shader["keywords"].setdefault("surfaceparm", set())
+				shader["keywords"]["surfaceparm"].add("alphashadows")
+
+		if shader["options"]["guessKeywords"]:
+			# guess surfaceParms
+			for surfaceParm, words in self.surfaceParms.items():
+				for word in words:
+					if word in shader["name"]:
+						shader["keywords"].setdefault("surfaceparm", set())
+						shader["keywords"]["surfaceparm"].add(surfaceParm)
 
 
 	def __expandLightShaders(self, setname):
@@ -168,8 +325,8 @@ class TextureSet():
 		newShaders = dict()
 		delNames   = set()
 
-		for shadername in self.mapping[setname]:
-			shader = self.mapping[setname][shadername]
+		for shadername in self.sets[setname]:
+			shader = self.sets[setname][shadername]
 
 			if shader["addition"]:
 				# mark original shader for deletion
@@ -177,8 +334,8 @@ class TextureSet():
 
 				if shader["meta"]["additionGrayscale"]:
 					# the addition map is grayscale, so
-					for colorName, (r, g, b) in self.lightColors.items():
-						for intensityName, intensity in self.customLights.items():
+					for colorName, (r, g, b) in shader["options"]["lightColors"].items():
+						for intensityName, intensity in shader["options"]["customLights"].items():
 							newShader = copy.deepcopy(shader)
 
 							newShader["meta"]["lightIntensity"]  = intensity
@@ -186,7 +343,7 @@ class TextureSet():
 
 							newShaders[shadername+"_"+colorName+"_"+intensityName] = newShader
 				else:
-					for intensityName, intensity in self.predefLights.items():
+					for intensityName, intensity in shader["options"]["predefLights"].items():
 						newShader = copy.deepcopy(shader)
 
 						newShader["meta"]["lightIntensity"]  = intensity
@@ -199,82 +356,73 @@ class TextureSet():
 
 		# delete old reference to the original
 		for shadername in delNames:
-			self.mapping[setname].pop(shadername)
+			self.sets[setname].pop(shadername)
 
 		# add new shaders (adds back original shader under new name, without addition map)
-		self.mapping[setname].update(newShaders)
-
-	def __addKeywords(self, shader):
-		"Adds keywords based on knowledge (and potentially assumptions) about the shader (meta)data."
-		shader.setdefault("keywords", dict())
-
-		# transparent diffuse map
-		if shader["meta"]["diffuseAlpha"]:
-			shader["keywords"]["cull"] = "none"
-
-			if self.alphaTest:
-				if type(self.alphaTest) == str:
-					shader["keywords"]["alphaFunc"] = self.alphaTest
-				else:
-					shader["keywords"]["alphaTest"] = "%.2f" % self.alphaTest
-
-			if self.alphaShadows:
-				shader["keywords"].setdefault("surfaceparm", set())
-				shader["keywords"]["surfaceparm"].add("alphashadows")
-
-		if self.guessKeywords:
-			# guess surfaceparms
-			for surfaceparm, words in self.surfaceparms.items():
-				for word in words:
-					if word in shader["name"]:
-						shader["keywords"].setdefault("surfaceparm", set())
-						shader["keywords"]["surfaceparm"].add(surfaceparm)
+		self.sets[setname].update(newShaders)
 
 
 	def generateSet(self, path, setname = None, cutextension = None):
 		"Generates shader data for a given texture source folder."
-		root = os.path.basename(os.path.abspath(path+os.path.sep+os.path.pardir))
-
-		# generate the set name
-		if not setname:
-			if cutextension and len(cutextension) > 0:
-				setname = root+"/"+os.path.basename(os.path.abspath(path)).rsplit(cutextension)[0]
-			else:
-				setname = root+"/"+os.path.basename(os.path.abspath(path))
-
-		self.mapping.setdefault(setname, dict())
-
-		filelist   = os.listdir(path)
+		abspath    = os.path.abspath(path)
+		root       = os.path.basename(os.path.abspath(path+os.path.sep+os.path.pardir))
+		relpath    = root+"/"+os.path.basename(abspath)
+		filelist   = os.listdir(abspath)
 		mapsbytype = dict() # map type -> set of filenames without extentions
 		mapext     = dict() # map name (no extension) -> map filename (with extension)
+		slothfiles = set()  # sloth per-shader config file names (no extension)
 
 		# retrieve all maps by type
 		for filename in filelist:
 			mapname, ext = os.path.splitext(filename)
 
-			for (maptype, suffix) in self.suffixes.items():
-				mapsbytype.setdefault(maptype, set())
+			if ext == self.slothFileExt:
+				slothfiles.add(mapname)
+			else:
+				for (maptype, suffix) in self.suffixes.items():
+					mapsbytype.setdefault(maptype, set())
 
-				if mapname.endswith(suffix):
-					mapext[mapname] = ext
-					mapsbytype[maptype].add(mapname)
+					if mapname.endswith(suffix):
+						mapext[mapname] = ext
+						mapsbytype[maptype].add(mapname)
+
+		# add a new set or extend the current one
+		if not setname:
+			if cutextension and len(cutextension) > 0:
+				setname = relpath.rsplit(cutextension)[0]
+			else:
+				setname = relpath
+
+		self.sets.setdefault(setname, dict())
+
+		# parse per-folder options
+		options = dict()
+
+		self.__copyOptions(self, options)
+
+		if self.defaultSlothFile in filelist:
+			self.__parseSlothFile(options, abspath+os.path.sep+self.defaultSlothFile)
 
 		# add a shader for each diffuse map
 		for diffusename in mapsbytype["diffuse"]:
 			shadername = diffusename.rsplit(self.suffixes["diffuse"])[0]
-			shader     = self.mapping[setname][shadername] = dict()
 
+			# add a new shader
+			shader = self.sets[setname][shadername] = dict()
+
+			# copy default options
+			self.__copyOptions(options, shader)
+
+			# init shader data
 			shader["name"]            = shadername
-			shader["path"]            = root+"/"+os.path.basename(os.path.abspath(path))
-			shader["abspath"]         = path
-
+			shader["relpath"]         = relpath
+			shader["abspath"]         = abspath
 			shader["diffuse"]         = diffusename
-			shader["diffuseExt"]      = mapext[diffusename]
-
+			shader["ext"]             = {"diffuse": mapext[diffusename]}
 			shader["meta"]            = dict()
 
 			# attempt to find a map of every known non-diffuse type
-			# assumes that non-diffuse map names form the start of diffuse map names, prefers longer names
+			# assumes that non-diffuse map names form the start of diffuse map names
 			for maptype, suffix in self.suffixes.items():
 				basename = shadername
 
@@ -282,14 +430,19 @@ class TextureSet():
 					mapname = basename+suffix
 
 					if mapname in mapsbytype[maptype]:
-						shader[maptype]       = mapname
-						shader[maptype+"Ext"] = mapext[mapname]
+						if mapname in slothfiles:
+							# parse per-shader options
+							self.__parseSlothFile(shader, abspath+os.path.sep+mapname+self.slothFileExt)
+						else:
+							shader[maptype]        = mapname
+							shader["ext"][maptype] = mapext[mapname]
 						break
 
 					basename = basename[:-1]
 
 				if basename == "": # no map of this type found
-					self.mapping[setname][shadername][maptype] = None
+					shader[maptype]        = None
+					shader["ext"][maptype] = None
 
 			# retrieve more metadata from the maps
 			self.__analyzeMaps(shader)
@@ -297,27 +450,29 @@ class TextureSet():
 			# now that we have enough knowledge about the shader, add keywords
 			self.__addKeywords(shader)
 
-		numVariants = str(len(self.mapping[setname]))
+		numVariants = str(len(self.sets[setname]))
 
 		# expand relevant shaders into multiple light emitting ones
 		self.__expandLightShaders(setname)
 
-		numShaders = str(len(self.mapping[setname]))
+		numShaders = str(len(self.sets[setname]))
 
 		print(setname+": Added "+numShaders+" shaders for "+numVariants+" texture variants.", file = sys.stderr)
 
 
 	def clearSets(self):
 		"Forgets about all shader data that has been generated."
-		self.mapping.clear()
+		self.sets.clear()
 
 
-	def __radToAdd(self, r, g = None, b = None):
+	def __radToAdd(self, shader, r, g = None, b = None):
 		"Given light colors, return modified colors to be used in the blend phase of the addition map."
+		exp = shader["options"]["radToAddExp"]
+
 		if g and b:
-			return (r**self.radToAddExp, g**self.radToAddExp, b**self.radToAddExp)
+			return (r**exp, g**exp, b**exp)
 		else:
-			return r**self.radToAddExp
+			return r**exp
 
 
 	def getShader(self, setname = None, shadername = None):
@@ -331,17 +486,17 @@ class TextureSet():
 				content += "// "+line+"\n"
 
 		if setname:
-			if setname in self.mapping:
+			if setname in self.sets:
 				setnames = (setname, )
 			else:
 				print("Unknown set "+str(setname)+".", file = sys.stderr)
 				return
 		else:
-			setnames = self.mapping.keys()
+			setnames = self.sets.keys()
 
 		for setname in setnames:
 			if shadername:
-				if shadername in self.mapping[setname]:
+				if shadername in self.sets[setname]:
 					names = (shadername, )
 				else:
 					continue
@@ -351,12 +506,12 @@ class TextureSet():
 				           "// "+setname+"\n"+\
 				           "// "+"-"*len(setname)+"\n"
 
-				names = sorted(self.mapping[setname].keys())
+				names = sorted(self.sets[setname].keys())
 
 			for shadername in names:
 				# prepare content
-				shader = self.mapping[setname][shadername]
-				path   = shader["path"]+"/"
+				shader = self.sets[setname][shadername]
+				path   = shader["relpath"]+"/"
 
 				# decide on a preview image
 				if shader["preview"]:
@@ -405,7 +560,7 @@ class TextureSet():
 
 				# diffuse map
 				if shader["diffuse"]:
-					if shader["meta"]["diffuseAlpha"] and not self.alphaTest:
+					if shader["meta"]["diffuseAlpha"] and not shader["options"]["alphaTest"]:
 						content += "\t{\n"+\
 						           "\t\tmap   "+path+shader["diffuse"]+"\n"+\
 						           "\t\tblend blend\n"+\
@@ -415,13 +570,15 @@ class TextureSet():
 
 				# normal & height map
 				if shader["normal"]:
-					if shader["height"] and self.heightNormalsMod > 0:
+					if shader["height"] and shader["options"]["heightNormalsMod"] > 0:
 						content += "\tnormalMap           addnormals ( "+path+shader["normal"]+\
-						           ", heightmap ( "+path+shader["height"]+", "+"%.2f" % self.heightNormalsMod+" ) )\n"
+						           ", heightmap ( "+path+shader["height"]+", "+\
+						           "%.2f" % shader["options"]["heightNormalsMod"]+" ) )\n"
 					else:
 						content += "\tnormalMap           "+path+shader["normal"]+"\n"
-				elif shader["height"] and self.heightNormalsMod > 0:
-					content += "\tnormalMap           heightmap ( "+path+shader["height"]+", "+"%.2f" % self.heightNormalsMod+" )\n"
+				elif shader["height"] and shader["options"]["heightNormalsMod"] > 0:
+					content += "\tnormalMap           heightmap ( "+path+shader["height"]+", "+\
+						       "%.2f" % shader["options"]["heightNormalsMod"]+" )\n"
 
 				# specular map
 				if shader["specular"]:
@@ -434,9 +591,9 @@ class TextureSet():
 							   "\t\tblend add\n"
 					if "lightColor" in shader["meta"]:
 						content += \
-							   "\t\tred   "+"%.2f" % self.__radToAdd(r)+"\n"+\
-							   "\t\tgreen "+"%.2f" % self.__radToAdd(g)+"\n"+\
-							   "\t\tblue  "+"%.2f" % self.__radToAdd(b)+"\n"
+							   "\t\tred   "+"%.2f" % self.__radToAdd(shader, r)+"\n"+\
+							   "\t\tgreen "+"%.2f" % self.__radToAdd(shader, g)+"\n"+\
+							   "\t\tblue  "+"%.2f" % self.__radToAdd(shader, b)+"\n"
 					content += \
 							   "\t}\n"
 
@@ -450,6 +607,7 @@ if __name__ == "__main__":
 	p = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 	                            description="Generates XreaL/Daemon shader files from directories of texture maps.")
 
+	# Misc arguments
 	p.add_argument("pathes", metavar="PATH", nargs="+",
 	               help="Path to a source directory that should be added to the set")
 
@@ -462,23 +620,12 @@ if __name__ == "__main__":
 	# Texture map suffixes
 	g = p.add_argument_group("Texture map suffixes")
 
-	g.add_argument("-d", "--diff", metavar="SUF", default="_d",
-	               help="Suffix used by diffuse maps")
-
-	g.add_argument("-n", "--normal", metavar="SUF", default="_n",
-	               help="Suffix used by normal maps")
-
-	g.add_argument("-z", "--height", metavar="SUF", default="_h",
-	               help="Suffix used by height maps")
-
-	g.add_argument("-s", "--spec", metavar="SUF", default="_s",
-	               help="Suffix used by specular maps")
-
-	g.add_argument("-a", "--add", metavar="SUF", default="_a",
-	               help="Suffix used by addition/glow maps")
-
-	g.add_argument("-p", "--prev", metavar="SUF", default="_p",
-	               help="Suffix used by preview images")
+	g.add_argument("-d", "--diff",   metavar="SUF", default="_d", help="Suffix used by diffuse maps")
+	g.add_argument("-n", "--normal", metavar="SUF", default="_n", help="Suffix used by normal maps")
+	g.add_argument("-z", "--height", metavar="SUF", default="_h", help="Suffix used by height maps")
+	g.add_argument("-s", "--spec",   metavar="SUF", default="_s", help="Suffix used by specular maps")
+	g.add_argument("-a", "--add",    metavar="SUF", default="_a", help="Suffix used by addition/glow maps")
+	g.add_argument("-p", "--prev",   metavar="SUF", default="_p", help="Suffix used by preview images")
 
 	# Light emitting shaders
 	g = p.add_argument_group("Light emitting shaders")
@@ -490,7 +637,7 @@ if __name__ == "__main__":
 	g.add_argument("-l", "--custom-lights", metavar="VALUE", type=int, nargs="+", default=[1000,2000,4000],
 	               help="Add light intensities for light emitting shaders with custom colors (grayscale addition map)")
 
-	g.add_argument("-i", "--predefined-lights", metavar="VALUE", type=int, nargs="+", default=[0,200],
+	g.add_argument("-i", "--predef-lights", metavar="VALUE", type=int, nargs="+", default=[0,200],
 	               help="Add light intensities for light emitting shaders with predefined colors (non-grayscale addition map)")
 
 	g.add_argument("--color-blend-exp", metavar="VALUE", type=float, default=1.0,
@@ -535,44 +682,44 @@ if __name__ == "__main__":
 	a = p.parse_args()
 
 	# init generator
-	ts = TextureSet()
+	sg = ShaderGenerator()
 
-	ts.setSuffixes(diffuse = a.diff, normal = a.normal, height = a.height,
+	sg.setSuffixes(diffuse = a.diff, normal = a.normal, height = a.height,
 	               specular = a.spec, addition = a.add, preview = a.prev)
 
-	ts.setKeywordGuessing(a.guess)
-	ts.setRadToAddExponent(a.color_blend_exp)
-	ts.setHeightNormalsMod(a.height_normals)
-	ts.setAlphaShadows(not a.no_alpha_shadows)
+	sg.setKeywordGuessing(a.guess)
+	sg.setRadToAddExponent(a.color_blend_exp)
+	sg.setHeightNormalsMod(a.height_normals)
+	sg.setAlphaShadows(not a.no_alpha_shadows)
 
 	if a.header:
-		ts.setHeader(a.header.read())
+		sg.setHeader(a.header.read())
 		a.header.close()
 
 	for (name, color) in [item.split(":") for item in a.colors]:
-		ts.addLightColor(name, color)
+		sg.addLightColor(name, color)
 
 	for intensity in a.custom_lights:
-		ts.addCustomLightIntensity(intensity)
+		sg.addCustomLightIntensity(intensity)
 
-	for intensity in a.predefined_lights:
-		ts.addPredefLightIntensity(intensity)
+	for intensity in a.predef_lights:
+		sg.addPredefLightIntensity(intensity)
 
 	if a.alpha_test:
-		ts.setAlphaTest(a.alpha_test)
+		sg.setAlphaTest(a.alpha_test)
 	elif a.gt0:
-		ts.setAlphaTest("GT0")
+		sg.setAlphaTest("GT0")
 	elif a.ge128:
-		ts.setAlphaTest("GE128")
+		sg.setAlphaTest("GE128")
 	elif a.lt128:
-		ts.setAlphaTest("LT128")
+		sg.setAlphaTest("LT128")
 
 	# generate
 	for path in a.pathes:
-		ts.generateSet(path, setname = a.root, cutextension = a.strip)
+		sg.generateSet(path, setname = a.root, cutextension = a.strip)
 
 	# output
-	shader = ts.getShader()
+	shader = sg.getShader()
 
 	if a.out:
 		a.out.write(shader)
