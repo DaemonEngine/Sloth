@@ -216,8 +216,17 @@ class ShaderGenerator(dict):
 
 
 	def __parseSlothFile(self, shader, path):
-		"Parses a per-shader option file."
-		config = configparser.ConfigParser()
+		"Parses a per-folder/shader options file."
+		config = configparser.ConfigParser(allow_no_value = True)
+
+		# be case sensitive
+		config.sectionsxform = lambda option: option
+		config.optionxform   = lambda option: option
+
+		if "name" in shader:
+			print("Found options file for "+shader["name"]+".", file = sys.stderr)
+		else:
+			print("Found per-folder options file.", file = sys.stderr)
 
 		# parse file
 		try:
@@ -226,56 +235,84 @@ class ShaderGenerator(dict):
 		except IOError:
 			print("Couldn't read "+path+".", file = sys.stderr)
 			return
-		except configparser.ParsingError as error:
-			print("Sloth file "+path+" contains an error:\n"+str(error), file = sys.stderr)
+		except (configparser.ParsingError, configparser.DuplicateOptionError) as error:
+			print(str(error), file = sys.stderr)
 			return
 
-		print("Parsing per-folder options file: "+path, file = sys.stderr)
-
 		# parse options
-		if "light" in config:
-			options = config["light"]
+		for section in config:
+			options = config[section]
 
-			if "colors" in options:
-				shader["options"]["lightColors"].clear()
+			if section == "options":
+				for option in options:
+					if option == "colors":
+						shader["options"]["lightColors"].clear()
 
-				for nameAndColor in options["colors"].split():
-					try:
-						name, color = nameAndColor.split(":")
-					except ValueError:
-						continue
-					self.__addLightColor(name, color, shader)
+						for nameAndColor in options[option].split():
+							try:
+								name, color = nameAndColor.split(":")
+							except ValueError:
+								continue
+							self.__addLightColor(name, color, shader)
 
-			if "add_colors" in options:
-				for nameAndColor in options["add_colors"].split():
-					try:
-						name, color = nameAndColor.split(":")
-					except ValueError:
-						continue
-					self.__addLightColor(name, color, shader)
+					elif option == "addColors":
+						for nameAndColor in options[option].split():
+							try:
+								name, color = nameAndColor.split(":")
+							except ValueError:
+								continue
+							self.__addLightColor(name, color, shader)
 
-			if "predef_lights" in options:
-				shader["options"]["predefLights"].clear()
+					elif option == "predefLights":
+						shader["options"][option].clear()
 
-				for intensity in options["predef_lights"].split():
-					self.__addLightIntensity(int(intensity), False, shader)
+						for intensity in options["predefLights"].split():
+							self.__addLightIntensity(int(intensity), False, shader)
 
-			if "add_predef_lights" in options:
-				for intensity in options["add_predef_lights"].split():
-					self.__addLightIntensity(int(intensity), False, shader)
+					elif option == "addPredefLights":
+						for intensity in options[option].split():
+							self.__addLightIntensity(int(intensity), False, shader)
 
-			if "custom_lights" in options:
-				shader["options"]["customLights"].clear()
+					elif option == "customLights" in options:
+						shader["options"][option].clear()
 
-				for intensity in options["custom_lights"].split():
-					self.__addLightIntensity(int(intensity), True, shader)
+						for intensity in options[option].split():
+							self.__addLightIntensity(int(intensity), True, shader)
 
-			if "add_custom_lights" in options:
-				for intensity in options["add_custom_lights"].split():
-					self.__addLightIntensity(int(intensity), True, shader)
+					elif option == "addCustomLights":
+						for intensity in options[option].split():
+							self.__addLightIntensity(int(intensity), True, shader)
 
-			if "color_blend_exp" in options:
-				self.__setRadToAddExponent(options["color_blend_exp"], shader)
+					elif option == "colorBlendExp":
+						self.__setRadToAddExponent(options.getfloat(option), shader)
+
+					elif option == "alphaFunc":
+						self.__setAlphaTest(options[option], shader)
+
+					elif option == "alphaTest":
+						self.__setAlphaTest(options.getfloat(option), shader)
+
+					elif option == "alphaShadows":
+						self.__setAlphaShadows(options.getboolean(option), shader)
+
+					elif option == "heightNormalsMod":
+						self.__setHeightNormalsMod(options.getfloat(option), shader)
+
+					else:
+						print("Invalid option "+option+" in section "+section+".", file=sys.stderr)
+
+			elif section in ("keywords", "addKeywords", "delKeywords"):
+				for key, value in config[section].items():
+					shader["options"].setdefault(section, dict())
+
+					if value:
+						shader["options"][section].setdefault(key, set())
+						shader["options"][section][key].update(value.split())
+					else:
+						shader["options"][section][key] = None
+
+			elif section != "DEFAULT":
+				print("Invalid section "+section+".", file=sys.stderr)
 
 
 	def __analyzeMaps(self, shader):
@@ -293,30 +330,57 @@ class ShaderGenerator(dict):
 
 
 	def __addKeywords(self, shader):
-		"Adds keywords based on knowledge (and potentially assumptions) about the shader (meta)data."
+		"Adds keywords based on knowledge (and potentially assumptions) about the shader (meta)data. Doesn't overwrite existing keywords."
 		shader.setdefault("keywords", dict())
+		keywords = shader["keywords"]
+		options  = shader["options"]
 
-		# transparent diffuse map
+		# handle transparent diffuse map
 		if shader["meta"]["diffuseAlpha"]:
-			shader["keywords"]["cull"] = "none"
+			keywords["cull"] = {"none"}
 
-			if shader["options"]["alphaTest"]:
-				if type(shader["options"]["alphaTest"]) == str:
-					shader["keywords"]["alphaFunc"] = shader["options"]["alphaTest"]
+			if options["alphaTest"]:
+				if type(options["alphaTest"]) == str:
+					keywords["alphaFunc"] = {options["alphaTest"]}
 				else:
-					shader["keywords"]["alphaTest"] = "%.2f" % shader["options"]["alphaTest"]
+					keywords["alphaTest"] = {"%.2f" % options["alphaTest"]}
 
-			if shader["options"]["alphaShadows"]:
-				shader["keywords"].setdefault("surfaceparm", set())
-				shader["keywords"]["surfaceparm"].add("alphashadows")
+			if options["alphaShadows"]:
+				keywords.setdefault("surfaceparm", set())
+				keywords["surfaceparm"].add("alphashadows")
 
-		if shader["options"]["guessKeywords"]:
-			# guess surfaceParms
+		# attempt to guess additional keywords
+		if options["guessKeywords"]:
 			for surfaceParm, words in self.surfaceParms.items():
 				for word in words:
 					if word in shader["name"]:
-						shader["keywords"].setdefault("surfaceparm", set())
-						shader["keywords"]["surfaceparm"].add(surfaceParm)
+						keywords.setdefault("surfaceparm", set())
+						keywords["surfaceparm"].add(surfaceParm)
+
+		# overlay keywords defined in options, overwrite on conflict
+		if "keywords" in options:
+			for key, value in options["keywords"].items():
+				keywords[key] = value
+
+		# overlay keywords defined in options, if possible extend on conflict
+		if "addKeywords" in options:
+			for key, value in options["addKeywords"].items():
+				if not key in keywords:
+					keywords[key] = value
+				else:
+					keywords[key].update(value)
+
+		# delete specified keywords
+		if "delKeywords" in options:
+			for key, value in options["delKeywords"].items():
+				if key in keywords:
+					if value == None:
+						keywords.pop(key)
+					else:
+						keywords[key].difference_update(value)
+
+						if len(keywords[key]) == 0:
+							keywords.pop(key)
 
 
 	def __expandLightShaders(self, setname):
@@ -421,6 +485,13 @@ class ShaderGenerator(dict):
 			shader["ext"]             = {"diffuse": mapext[diffusename]}
 			shader["meta"]            = dict()
 
+			# attempt to find per-shader options file
+			slothname = ""
+			for pos in range(len(shadername)):
+				slothname += shadername[pos]
+				if slothname in slothfiles:
+					self.__parseSlothFile(shader, abspath+os.path.sep+slothname+self.slothFileExt)
+
 			# attempt to find a map of every known non-diffuse type
 			# assumes that non-diffuse map names form the start of diffuse map names
 			for maptype, suffix in self.suffixes.items():
@@ -430,12 +501,8 @@ class ShaderGenerator(dict):
 					mapname = basename+suffix
 
 					if mapname in mapsbytype[maptype]:
-						if mapname in slothfiles:
-							# parse per-shader options
-							self.__parseSlothFile(shader, abspath+os.path.sep+mapname+self.slothFileExt)
-						else:
-							shader[maptype]        = mapname
-							shader["ext"][maptype] = mapext[mapname]
+						shader[maptype]        = mapname
+						shader["ext"][maptype] = mapext[mapname]
 						break
 
 					basename = basename[:-1]
@@ -539,8 +606,11 @@ class ShaderGenerator(dict):
 						if type(value) != str and hasattr(value, "__iter__"):
 							for value in sorted(value):
 								content += "\t"+key+" "*max(1, 20-len(key))+str(value)+"\n"
+						elif value == None:
+							content += "\t"+key+"\n"
 						else:
 							content += "\t"+key+" "*max(1, 20-len(key))+str(value)+"\n"
+
 					content += "\n"
 
 				# surface light
