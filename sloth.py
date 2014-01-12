@@ -62,6 +62,7 @@ class ShaderGenerator(dict):
 		self["options"]["heightNormalsMod"] = 1.0    # modifier used when generating normals from height maps
 		self["options"]["alphaTest"]        = None   # whether to use an alphaFunc/alphaTest keyword or smooth blending (default)
 		self["options"]["alphaShadows"]     = True   # whether to add the alphashadows surfaceparm keyword to relevant shaders
+		self["options"]["daemonFeatures"]   = False  # whether to use features specific to the Daemon engine
 
 
 	##################
@@ -205,6 +206,16 @@ class ShaderGenerator(dict):
 		self.__addLightIntensity(intensity, False)
 
 
+	def __setDaemonFeatures(self, value, shader = None):
+		if not shader:
+			shader = self
+
+		shader["options"]["daemonFeatures"] = value
+
+	def setDaemonFeatures(self, value = True):
+		self.__setDaemonFeatures(value)
+
+
 	#################
 	# FUNCTIONALITY #
 	#################
@@ -297,6 +308,9 @@ class ShaderGenerator(dict):
 
 					elif option == "heightNormalsMod":
 						self.__setHeightNormalsMod(options.getfloat(option), shader)
+
+					elif option == "daemonFeatures":
+						self.__setDaemonFeatures(options.getboolean(option), shader)
 
 					else:
 						print("Invalid option "+option+" in section "+section+".", file=sys.stderr)
@@ -656,16 +670,19 @@ class ShaderGenerator(dict):
 
 				# addition map
 				if shader["addition"]:
-					content += "\t{\n"+\
-							   "\t\tmap   "+path+shader["addition"]+"\n"+\
-							   "\t\tblend add\n"
-					if "lightColor" in shader["meta"]:
-						content += \
-							   "\t\tred   "+"%.2f" % self.__radToAdd(shader, r)+"\n"+\
-							   "\t\tgreen "+"%.2f" % self.__radToAdd(shader, g)+"\n"+\
-							   "\t\tblue  "+"%.2f" % self.__radToAdd(shader, b)+"\n"
-					content += \
-							   "\t}\n"
+					if shader["options"]["daemonFeatures"] \
+					and ("lightColor" not in shader["meta"] or r == b == g == 1.0):
+						content += "\tglowMap             "+path+shader["addition"]+"\n"
+					else:
+						content += "\t{\n"+\
+						           "\t\tmap   "+path+shader["addition"]+"\n"+\
+						           "\t\tblend add\n"
+						if "lightColor" in shader["meta"] and (r != 1.0 or g != 1.0 or b != 1.0):
+							content += \
+							       "\t\tred   "+"%.2f" % self.__radToAdd(shader, r)+"\n"+\
+							       "\t\tgreen "+"%.2f" % self.__radToAdd(shader, g)+"\n"+\
+							       "\t\tblue  "+"%.2f" % self.__radToAdd(shader, b)+"\n"
+						content += "\t}\n"
 
 				content += "}\n"
 
@@ -686,6 +703,9 @@ if __name__ == "__main__":
 
 	p.add_argument("--height-normals", metavar="VALUE", type=float, default=1.0,
 	               help="Modifier used for generating normals from a heightmap")
+
+	p.add_argument("--daemon", action="store_true",
+	               help="Use features of the Daemon engine. Makes the shaders incompatible with vanilla XreaL.")
 
 	# Texture map suffixes
 	g = p.add_argument_group("Texture map suffixes")
@@ -761,6 +781,7 @@ if __name__ == "__main__":
 	sg.setRadToAddExponent(a.color_blend_exp)
 	sg.setHeightNormalsMod(a.height_normals)
 	sg.setAlphaShadows(not a.no_alpha_shadows)
+	sg.setDaemonFeatures(a.daemon)
 
 	if a.header:
 		sg.setHeader(a.header.read())
