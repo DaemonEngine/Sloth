@@ -690,12 +690,107 @@ class ShaderGenerator(dict):
 		return content
 
 
+class ExampleConfig(argparse.Action):
+	example = \
+"""
+# This is a per-directory/shader configuration file for Sloth.
+#
+# Sloth is a Python tool that generates XreaL/Daemon shader files from
+# directories of texture maps. Sloth is free software and can be found at
+# https://github.com/Unvanquished/Sloth
+#
+# The command line arguments used to invoke Sloth are global defaults for all
+# shaders. They can be changed on a per-directory level by putting a file
+# named "options.sloth" in the texture source folder. Other files ending in
+# ".sloth" are read when their basename forms the beginning of the shader name
+# in question. It is possible to have multiple sloth files overlay each other
+# in a hierarchical order, for example one named "metal.sloth" that adds the
+# "metalsteps" surface parameter to every shader starting with "metal" and one
+# named "metaleatingbacteria.sloth" that removes it and adds the "flesh"
+# surfaceparm instead for shaders starting with the respective string.
+#
+# An example configuration can be generated with the -e/--example-config
+# argument. Be aware that sloth files are case-sensitive.
+
+# The "options" section contains mostly keywords that correspond to command
+# line options. For a detailed description of their function invoke Sloth with
+# the -h/--help option.
+[options]
+# Corresponds to --colors
+#colors = red:ff0000 green:00ff00
+
+# Like "colors" but doesn't clear previous values
+#addColors = blue:0000ff white:ffffff
+
+# Corresponds to --custom-lights
+#customLights = 1000 2000
+
+# Like "customLights" but doesn't clear previous values
+#addCustomLights = 3000 4000
+
+# Corresponds to --predef-lights
+#predefLights = 100 200
+
+# Like "predefLights" but doesn't clear previous values
+#addPredefLights = 300 400
+
+# Corresponds to --color-blend-exp
+#colorBlendExp = 1.2
+
+# Correspond to --gt0, --ge128 and --lt128, respectively
+#alphaFunc = GT0
+#alphaFunc = GE128
+#alphaFunc = LT128
+
+# Corresponds to --alpha-test
+#alphaTest = 0.5
+
+# Value "off" corresponds to --no-alpha-shadows
+#alphaShadows = off
+
+# Corresponds to --height-normals
+#heightNormalsMod = 0.8
+
+# Value "on" corresponds to --daemon
+#daemonFeatures = on
+
+# The "keywords" section sets custom key/value pairs. This overwrites
+# everything between qer_* keywords and the texture map definitions.
+# Multiple values will be expanded to multiple lines with the same keyword.
+# The value can also be omitted, so that only the keyword gets added.
+[keywords]
+#alphashadows
+#cull = none
+#surfaceparm = metalsteps trans
+
+# Like "keywords", but previous key/value pairs will be preserved.
+# Useful for adding surface parameters to groups of shaders that represent a
+# certain material
+[addKeywords]
+#surfaceparm = metalsteps
+
+# The opposite of "addKeywords": These key/value pairs or keywords will be
+# removed. If only a key is given, all key/value pairs matching the keyword as
+# well as keywords without a value will be removed. If a value is given, only
+# the exact key/value pairs are matched.
+[delKeywords]
+#surfaceparm = metalsteps
+"""
+
+	def __call__(self, parser, namespace, values, option_string=None):
+		print(self.example.strip("\n"))
+		exit()
+
+
 if __name__ == "__main__":
 	# parse command line options
 	p = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 	                            description="Generates XreaL/Daemon shader files from directories of texture maps.")
 
 	# Misc arguments
+	p.add_argument("-e", "--example-config", action=ExampleConfig, nargs=0,
+	               help="Prints an example per-directory/shader configuration file")
+
 	p.add_argument("pathes", metavar="PATH", nargs="+",
 	               help="Path to a source directory that should be added to the set")
 
