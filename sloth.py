@@ -351,6 +351,8 @@ class ShaderGenerator(dict):
 
 		# handle transparent diffuse map
 		if shader["meta"]["diffuseAlpha"]:
+			keywords.setdefault("surfaceparm", set())
+			keywords["surfaceparm"].add("trans")
 			keywords["cull"] = {"none"}
 
 			if options["alphaTest"]:
@@ -360,7 +362,6 @@ class ShaderGenerator(dict):
 					keywords["alphaTest"] = {"%.2f" % options["alphaTest"]}
 
 			if options["alphaShadows"]:
-				keywords.setdefault("surfaceparm", set())
 				keywords["surfaceparm"].add("alphashadows")
 
 		# attempt to guess additional keywords
