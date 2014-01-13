@@ -11,9 +11,10 @@ Unvanquished) compatible shader files given a texture map source directory.
 
 * Supports diffuse, normal, height, specular and addition maps as well as preview images
 * Generates light emitting shaders from addition maps given a number of named colors and intensities
-* Autodetects texture variants (shaders sharing non-diffuse maps)
+* Detects alpha channels and supports different blending modes
+* Detects texture variants (shaders sharing non-diffuse maps)
 * Can generate multiple sets at once or merge different source folders into one set
-* Can prepend a header to the resulting shader file
+* Supports hierarchical configuraton files (per-directory/prefix/shader) for full automation
 * It's not slow, it's named Sloth because it's made for lazy mappers!
 
 Dependencies
@@ -27,13 +28,15 @@ Installation
 
 Just run sloth.py with Python.
 
-Usage
------
-
-	usage: sloth.py [-h] [-m MOD] [-g] [-d SUF] [-n SUF] [-z SUF] [-s SUF]
-	                [-a SUF] [-p SUF] [-c NAME:COLOR [NAME:COLOR ...]]
-	                [-l VALUE [VALUE ...]] [-i VALUE [VALUE ...]] [-e VALUE]
-	                [-r ROOT] [-x SUF] [-t FILE] [-o DEST]
+	Usage
+	-----
+	
+	usage: sloth.py [-h] [-e] [-g] [--height-normals VALUE] [--daemon] [-d SUF]
+	                [-n SUF] [-z SUF] [-s SUF] [-a SUF] [-p SUF]
+	                [-c NAME:COLOR [NAME:COLOR ...]] [-l VALUE [VALUE ...]]
+	                [-i VALUE [VALUE ...]] [--color-blend-exp VALUE]
+	                [--gt0 | --ge128 | --lt128 | --alpha-test VALUE]
+	                [--no-alpha-shadows] [-r ROOT | -x SUF] [-t FILE] [-o DEST]
 	                PATH [PATH ...]
 	
 	Generates XreaL/Daemon shader files from directories of texture maps.
@@ -44,11 +47,15 @@ Usage
 	
 	optional arguments:
 	  -h, --help            show this help message and exit
-	  -m MOD, --height-normals MOD
-	                        Modifier used for generating normals from a heightmap
-	                        (default: 1.0)
+	  -e, --example-config  Prints an example per-directory/shader configuration
+	                        file (default: None)
 	  -g, --guess           Guess additional keywords based on shader (meta)data
 	                        (default: False)
+	  --height-normals VALUE
+	                        Modifier used for generating normals from a heightmap
+	                        (default: 1.0)
+	  --daemon              Use features of the Daemon engine. Makes the shaders
+	                        incompatible with vanilla XreaL. (default: False)
 	
 	Texture map suffixes:
 	  -d SUF, --diff SUF    Suffix used by diffuse maps (default: _d)
@@ -66,14 +73,26 @@ Usage
 	  -l VALUE [VALUE ...], --custom-lights VALUE [VALUE ...]
 	                        Add light intensities for light emitting shaders with
 	                        custom colors (grayscale addition map) (default:
-	                        [1000, 2000, 5000])
-	  -i VALUE [VALUE ...], --predefined-lights VALUE [VALUE ...]
+	                        [1000, 2000, 4000])
+	  -i VALUE [VALUE ...], --predef-lights VALUE [VALUE ...]
 	                        Add light intensities for light emitting shaders with
 	                        predefined colors (non-grayscale addition map)
 	                        (default: [0, 200])
-	  -e VALUE, --color-blend-exp VALUE
-	                        Exponent used to transform custom light color channels
-	                        for use in the addition map blend phase (default: 1.0)
+	  --color-blend-exp VALUE
+	                        Exponent applied to custom light color channels for
+	                        use in the addition map blend phase (default: 1.0)
+	
+	Alpha blending:
+	  --gt0                 Use alphaFunc GT0 instead of smooth alpha blending.
+	                        (default: False)
+	  --ge128               Use alphaFunc GE128 instead of smooth alpha blending.
+	                        (default: False)
+	  --lt128               Use alphaFunc LT128 instead of smooth alpha blending.
+	                        (default: False)
+	  --alpha-test VALUE    Use alphaTest instead of smooth alpha blending.
+	                        (default: None)
+	  --no-alpha-shadows    Don't add the alphashadows surfaceparm. (default:
+	                        False)
 	
 	Input & Output:
 	  -r ROOT, --root ROOT  Sets the namespace for the set (e.g.
@@ -92,8 +111,6 @@ your diffuse map names (e.g. wall1\_d.tga, wall2\_d.tga, wall\_n.tga, wall\_s.tg
 License
 -------
 
-> Copyright 2014 Unvanquished Development
->
 > This program is free software: you can redistribute it and/or modify
 > it under the terms of the GNU General Public License as published by
 > the Free Software Foundation, either version 3 of the License, or
