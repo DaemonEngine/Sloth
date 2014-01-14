@@ -49,7 +49,8 @@ class ShaderGenerator(dict):
 	defaultSlothFile = "options"+slothFileExt
 
 
-	def __init__(self):
+	def __init__(self, verbosity = 0):
+		self.verbosity        = verbosity
 		self.sets             = dict() # set name -> shader name -> key -> value
 		self.header           = ""     # header to be prepended to output
 		self.suffixes         = dict() # map type -> suffix
@@ -66,6 +67,25 @@ class ShaderGenerator(dict):
 		self["options"]["alphaTest"]        = None   # whether to use an alphaFunc/alphaTest keyword or smooth blending (default)
 		self["options"]["alphaShadows"]     = True   # whether to add the alphashadows surfaceparm keyword to relevant shaders
 		self["options"]["renderer"]         = self.defaultRenderer
+
+
+	#############
+	# DEBUGGING #
+	#############
+
+
+	def verbose(self, text):
+		if self.verbosity > 0:
+			print(text, file = sys.stderr)
+
+
+	def debug(self, text):
+		if self.verbosity > 1:
+			print(text, file = sys.stderr)
+
+
+	def error(self, text):
+		print("Error: "+text, file = sys.stderr)
 
 
 	##################
@@ -89,6 +109,7 @@ class ShaderGenerator(dict):
 
 
 	def readConfig(self, fp):
+		self.verbose("Parsing global options file...")
 		self.__parseSlothFile(self, fp)
 
 
@@ -141,7 +162,7 @@ class ShaderGenerator(dict):
 		elif test == None:
 			shader["options"]["alphaTest"] = None
 		else:
-			print("Alpha test must be either None, a valid string or a float between 0 and 1.", file = sys.stderr)
+			self.error("Alpha test must be either None, a valid string or a float between 0 and 1.")
 
 	def setAlphaTest(self, test):
 		"Set the alpha test method used, blend smoothly if None."
@@ -164,7 +185,7 @@ class ShaderGenerator(dict):
 			shader = self
 
 		if not self.colorRE.match(color):
-			print("Not a valid color: "+color+". Format is [0-9][a-f]{6}.", file = sys.stderr)
+			self.error("Not a valid color: "+color+". Format is [0-9][a-f]{6}.")
 			return
 
 		r = int(color[0:2], 16)
@@ -172,8 +193,8 @@ class ShaderGenerator(dict):
 		b = int(color[4:6], 16)
 
 		if name in shader["options"]["lightColors"] and (r, g, b) != shader["options"]["lightColors"][name]:
-			print("Overwriting light color "+name+": "+"%02x%02x%02x" % shader["options"]["lightColors"][name]+\
-			      " -> "+color, file = sys.stderr)
+			self.verbose("Overwriting light color "+name+": "+"%02x%02x%02x" % shader["options"]["lightColors"][name]+\
+			             " -> "+color)
 
 		shader["options"]["lightColors"][name] = (r, g, b)
 
@@ -189,7 +210,7 @@ class ShaderGenerator(dict):
 		intensity = int(intensity)
 
 		if intensity < 0:
-			print("Ignoring negative light intensity.", file = sys.stderr)["meta"]
+			self.verbose("Ignoring negative light intensity.")
 			return
 
 		if intensity >= 10000:
@@ -220,8 +241,7 @@ class ShaderGenerator(dict):
 		if renderer in self.supportedRenderers:
 			shader["options"]["renderer"] = renderer
 		else:
-			print("Renderer "+renderer+" not supported. Supported renderers are "+str(self.supportedRenderers)+".",
-			      file = sys.stderr)
+			self.error("Renderer "+renderer+" not supported. Supported renderers are "+str(self.supportedRenderers)+".")
 
 	def setRenderer(self, renderer):
 		self.__setRenderer(renderer)
@@ -245,11 +265,6 @@ class ShaderGenerator(dict):
 		config.sectionsxform = lambda option: option
 		config.optionxform   = lambda option: option
 
-		if "name" in shader:
-			print("Found options file for "+shader["name"]+".", file = sys.stderr)
-		else:
-			print("Found per-folder options file.", file = sys.stderr)
-
 		# parse file
 		try:
 			if hasattr(path, "read"):
@@ -258,10 +273,10 @@ class ShaderGenerator(dict):
 				with open(path, "r") as fp:
 					config.readfp(fp)
 		except IOError:
-			print("Couldn't read "+path+".", file = sys.stderr)
+			self.error("Couldn't read "+path+".")
 			return
 		except (configparser.ParsingError, configparser.DuplicateOptionError) as error:
-			print(str(error), file = sys.stderr)
+			self.error(str(error))
 			return
 
 		# parse options
@@ -327,7 +342,7 @@ class ShaderGenerator(dict):
 						self.__setRenderer(options[option], shader)
 
 					else:
-						print("Invalid option "+option+" in section "+section+".", file=sys.stderr)
+						self.error("Invalid option "+option+" in section "+section+".")
 
 			elif section in ("keywords", "addKeywords", "delKeywords"):
 				for key, value in config[section].items():
@@ -340,7 +355,7 @@ class ShaderGenerator(dict):
 						shader["options"][section][key] = None
 
 			elif section != "DEFAULT":
-				print("Invalid section "+section+".", file=sys.stderr)
+				self.error("Invalid section "+section+".")
 
 
 	def __analyzeMaps(self, shader):
@@ -494,6 +509,7 @@ class ShaderGenerator(dict):
 		self.__copyOptions(self, options)
 
 		if self.defaultSlothFile in filelist:
+			self.verbose("Parsing per-directory options file for "+relpath+"...")
 			self.__parseSlothFile(options, abspath+os.path.sep+self.defaultSlothFile)
 
 		# add a shader for each diffuse map
@@ -519,6 +535,10 @@ class ShaderGenerator(dict):
 			for pos in range(len(shadername)):
 				slothname += shadername[pos]
 				if slothname in slothfiles:
+					if slothname != shadername:
+						self.verbose("Parsing per-prefix options file for "+shadername+" ("+slothname+"*)...")
+					else:
+						self.verbose("Parsing per-shader options file for "+shadername+"...")
 					self.__parseSlothFile(shader, abspath+os.path.sep+slothname+self.slothFileExt)
 
 			# attempt to find a map of every known non-diffuse type
@@ -553,12 +573,14 @@ class ShaderGenerator(dict):
 
 		numShaders = str(len(self.sets[setname]))
 
-		print(setname+": Added "+numShaders+" shaders for "+numVariants+" texture variants.", file = sys.stderr)
+		self.verbose(setname+": Added "+numShaders+" shaders for "+numVariants+" texture variants.")
 
 
 	def clearSets(self):
 		"Forgets about all shader data that has been generated."
 		self.sets.clear()
+
+		self.verbose("Cleared all sets.")
 
 
 	def __radToAdd(self, shader, r, g = None, b = None):
@@ -585,7 +607,7 @@ class ShaderGenerator(dict):
 			if setname in self.sets:
 				setnames = (setname, )
 			else:
-				print("Unknown set "+str(setname)+".", file = sys.stderr)
+				self.error("Unknown set "+str(setname)+".")
 				return
 		else:
 			setnames = self.sets.keys()
@@ -811,6 +833,9 @@ if __name__ == "__main__":
 	p.add_argument("-e", "--example-config", action=ExampleConfig, nargs=0,
 	               help="Prints an example per-directory/shader configuration file")
 
+	p.add_argument("-v", "--verbose", action="count",
+	               help="Print debug information to stderr. Supply twice for more verbosity.")
+
 	p.add_argument("-f", "--config", metavar="FILE", type=argparse.FileType("r"),
 	               help="Read global configuration (takes precedence over command line arguments)")
 
@@ -902,7 +927,12 @@ if __name__ == "__main__":
 	a = p.parse_args()
 
 	# init generator
-	sg = ShaderGenerator()
+	if a.verbose:
+		verbosity = a.verbose
+	else:
+		verbosity = 0
+
+	sg = ShaderGenerator(verbosity)
 
 	sg.setSuffixes(diffuse = a.diff, normal = a.normal, height = a.height,
 	               specular = a.spec, addition = a.add, preview = a.prev)
