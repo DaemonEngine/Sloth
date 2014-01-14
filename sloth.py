@@ -39,6 +39,9 @@ class ShaderGenerator(dict):
 		"water":      ["water"],
 	}
 
+	defaultRenderer    = "xreal"
+	supportedRenderers = ("quake3", defaultRenderer, "daemon")
+
 	# extension for (per-shader) option files
 	slothFileExt     = ".sloth"
 
@@ -62,7 +65,7 @@ class ShaderGenerator(dict):
 		self["options"]["heightNormalsMod"] = 1.0    # modifier used when generating normals from height maps
 		self["options"]["alphaTest"]        = None   # whether to use an alphaFunc/alphaTest keyword or smooth blending (default)
 		self["options"]["alphaShadows"]     = True   # whether to add the alphashadows surfaceparm keyword to relevant shaders
-		self["options"]["daemonFeatures"]   = False  # whether to use features specific to the Daemon engine
+		self["options"]["renderer"]         = self.defaultRenderer
 
 
 	##################
@@ -206,14 +209,18 @@ class ShaderGenerator(dict):
 		self.__addLightIntensity(intensity, False)
 
 
-	def __setDaemonFeatures(self, value, shader = None):
+	def __setRenderer(self, renderer, shader = None):
 		if not shader:
 			shader = self
 
-		shader["options"]["daemonFeatures"] = value
+		if renderer in self.supportedRenderers:
+			shader["options"]["renderer"] = renderer
+		else:
+			print("Renderer "+renderer+" not supported. Supported renderers are "+str(self.supportedRenderers)+".",
+			      file = sys.stderr)
 
-	def setDaemonFeatures(self, value = True):
-		self.__setDaemonFeatures(value)
+	def setRenderer(self, renderer):
+		self.__setRenderer(renderer)
 
 
 	#################
@@ -309,8 +316,8 @@ class ShaderGenerator(dict):
 					elif option == "heightNormalsMod":
 						self.__setHeightNormalsMod(options.getfloat(option), shader)
 
-					elif option == "daemonFeatures":
-						self.__setDaemonFeatures(options.getboolean(option), shader)
+					elif option == "renderer":
+						self.__setRenderer(options[option], shader)
 
 					else:
 						print("Invalid option "+option+" in section "+section+".", file=sys.stderr)
@@ -650,35 +657,41 @@ class ShaderGenerator(dict):
 						           "\t\tmap   "+path+shader["diffuse"]+"\n"+\
 						           "\t\tblend blend\n"+\
 						           "\t}\n"
-					else:
+					elif shader["options"]["renderer"] != "quake3":
 						content += "\tdiffuseMap          "+path+shader["diffuse"]+"\n"
+					else:
+						content += "\t{\n"+\
+						           "\t\tmap   "+path+shader["diffuse"]+"\n"+\
+						           "\t}\n"
 
 				# normal & height map
-				if shader["normal"]:
-					if shader["height"] and shader["options"]["heightNormalsMod"] > 0:
-						content += "\tnormalMap           addnormals ( "+path+shader["normal"]+\
-						           ", heightmap ( "+path+shader["height"]+", "+\
-						           "%.2f" % shader["options"]["heightNormalsMod"]+" ) )\n"
-					else:
-						content += "\tnormalMap           "+path+shader["normal"]+"\n"
-				elif shader["height"] and shader["options"]["heightNormalsMod"] > 0:
-					content += "\tnormalMap           heightmap ( "+path+shader["height"]+", "+\
-						       "%.2f" % shader["options"]["heightNormalsMod"]+" )\n"
+				if shader["options"]["renderer"] != "quake3":
+					if shader["normal"]:
+						if shader["height"] and shader["options"]["heightNormalsMod"] > 0:
+							content += "\tnormalMap           addnormals ( "+path+shader["normal"]+\
+									   ", heightmap ( "+path+shader["height"]+", "+\
+									   "%.2f" % shader["options"]["heightNormalsMod"]+" ) )\n"
+						else:
+							content += "\tnormalMap           "+path+shader["normal"]+"\n"
+					elif shader["height"] and shader["options"]["heightNormalsMod"] > 0:
+						content += "\tnormalMap           heightmap ( "+path+shader["height"]+", "+\
+								   "%.2f" % shader["options"]["heightNormalsMod"]+" )\n"
 
 				# specular map
-				if shader["specular"]:
-					content += "\tspecularMap         "+path+shader["specular"]+"\n"
+				if shader["options"]["renderer"] != "quake3":
+					if shader["specular"]:
+						content += "\tspecularMap         "+path+shader["specular"]+"\n"
 
 				# addition map
 				if shader["addition"]:
-					if shader["options"]["daemonFeatures"] \
+					if shader["options"]["renderer"] == "daemon" \
 					and ("lightColor" not in shader["meta"] or r == b == g == 1.0):
 						content += "\tglowMap             "+path+shader["addition"]+"\n"
 					else:
 						content += "\t{\n"+\
 						           "\t\tmap   "+path+shader["addition"]+"\n"+\
 						           "\t\tblend add\n"
-						if "lightColor" in shader["meta"] and (r != 1.0 or g != 1.0 or b != 1.0):
+						if "lightColor" in shader["meta"] and r + g + b < 3.0:
 							content += \
 							       "\t\tred   "+"%.2f" % self.__radToAdd(shader, r)+"\n"+\
 							       "\t\tgreen "+"%.2f" % self.__radToAdd(shader, g)+"\n"+\
@@ -751,8 +764,8 @@ class ExampleConfig(argparse.Action):
 # Corresponds to --height-normals
 #heightNormalsMod = 0.8
 
-# Value "on" corresponds to --daemon
-#daemonFeatures = on
+# One of "quake3", "xreal" (default), "daemon"
+#renderer = daemon
 
 # The "keywords" section sets custom key/value pairs. This overwrites
 # everything between qer_* keywords and the texture map definitions.
@@ -800,8 +813,19 @@ if __name__ == "__main__":
 	p.add_argument("--height-normals", metavar="VALUE", type=float, default=1.0,
 	               help="Modifier used for generating normals from a heightmap")
 
-	p.add_argument("--daemon", action="store_true",
-	               help="Use features of the Daemon engine. Makes the shaders incompatible with vanilla XreaL.")
+	# Renderers
+	g = p.add_argument_group("Renderers")
+
+	gm = g.add_mutually_exclusive_group()
+
+	gm.add_argument("--daemon", action="store_true",
+	                help="Use renderer features of the Daemon engine. Makes the shaders incompatible with XreaL and Quake3.")
+
+	gm.add_argument("--xreal", action="store_true",
+	               help="Use renderer features of the XreaL engine. Makes the shaders incompatible with Quake3. This is the default.")
+
+	gm.add_argument("--quake3", action="store_true",
+	                help="Use renderer features of the vanilla Quake3 engine only.")
 
 	# Texture map suffixes
 	g = p.add_argument_group("Texture map suffixes")
@@ -873,11 +897,17 @@ if __name__ == "__main__":
 	sg.setSuffixes(diffuse = a.diff, normal = a.normal, height = a.height,
 	               specular = a.spec, addition = a.add, preview = a.prev)
 
+	if a.quake3:
+		sg.setRenderer("quake3")
+	elif a.daemon:
+		sg.setRenderer("daemon")
+	else:
+		sg.setRenderer("xreal")
+
 	sg.setKeywordGuessing(a.guess)
 	sg.setRadToAddExponent(a.color_blend_exp)
 	sg.setHeightNormalsMod(a.height_normals)
 	sg.setAlphaShadows(not a.no_alpha_shadows)
-	sg.setDaemonFeatures(a.daemon)
 
 	if a.header:
 		sg.setHeader(a.header.read())
