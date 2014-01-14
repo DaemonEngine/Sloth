@@ -55,7 +55,7 @@ class ShaderGenerator(dict):
 		self.suffixes         = dict() # map type -> suffix
 		self.setSuffixes()
 
-		# default options that can be overwritten on a per-folder/shader basis
+		# default options that can be overwritten on a per-directory/shader basis
 		self["options"]                     = dict()
 		self["options"]["lightColors"]      = dict() # color name -> RGB color triple
 		self["options"]["customLights"]     = dict() # intensity name -> intensity; for grayscale addition maps
@@ -86,6 +86,10 @@ class ShaderGenerator(dict):
 		self.suffixes["specular"] = specular
 		self.suffixes["addition"] = addition
 		self.suffixes["preview"]  = preview
+
+
+	def readConfig(self, fp):
+		self.__parseSlothFile(self, fp)
 
 
 	######################
@@ -234,7 +238,7 @@ class ShaderGenerator(dict):
 
 
 	def __parseSlothFile(self, shader, path):
-		"Parses a per-folder/shader options file."
+		"Parses a per-directory/shader options file. path can also be a file pointer."
 		config = configparser.ConfigParser(allow_no_value = True)
 
 		# be case sensitive
@@ -248,8 +252,11 @@ class ShaderGenerator(dict):
 
 		# parse file
 		try:
-			with open(path, "r") as fp:
-				config.readfp(fp)
+			if hasattr(path, "read"):
+				config.read_string(path.read())
+			else:
+				with open(path, "r") as fp:
+					config.readfp(fp)
 		except IOError:
 			print("Couldn't read "+path+".", file = sys.stderr)
 			return
@@ -481,7 +488,7 @@ class ShaderGenerator(dict):
 
 		self.sets.setdefault(setname, dict())
 
-		# parse per-folder options
+		# parse per-directory options
 		options = dict()
 
 		self.__copyOptions(self, options)
@@ -507,8 +514,8 @@ class ShaderGenerator(dict):
 			shader["ext"]             = {"diffuse": mapext[diffusename]}
 			shader["meta"]            = dict()
 
-			# attempt to find per-shader options file
-			slothname = ""
+			# attempt to find per-prefix/shader options file
+			slothname  = ""
 			for pos in range(len(shadername)):
 				slothname += shadername[pos]
 				if slothname in slothfiles:
@@ -804,6 +811,9 @@ if __name__ == "__main__":
 	p.add_argument("-e", "--example-config", action=ExampleConfig, nargs=0,
 	               help="Prints an example per-directory/shader configuration file")
 
+	p.add_argument("-f", "--config", metavar="FILE", type=argparse.FileType("r"),
+	               help="Read global configuration (takes precedence over command line arguments)")
+
 	p.add_argument("pathes", metavar="PATH", nargs="+",
 	               help="Path to a source directory that should be added to the set")
 
@@ -930,6 +940,10 @@ if __name__ == "__main__":
 		sg.setAlphaTest("GE128")
 	elif a.lt128:
 		sg.setAlphaTest("LT128")
+
+	# read global configuration
+	if a.config:
+		sg.readConfig(a.config)
 
 	# generate
 	for path in a.pathes:
