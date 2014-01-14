@@ -27,13 +27,11 @@ Installation
 
 Just run sloth.py with Python.
 
-	Usage
-	-----
-	
-	usage: sloth.py [-h] [-e] [-g] [--height-normals VALUE] [--daemon] [-d SUF]
-	                [-n SUF] [-z SUF] [-s SUF] [-a SUF] [-p SUF]
-	                [-c NAME:COLOR [NAME:COLOR ...]] [-l VALUE [VALUE ...]]
-	                [-i VALUE [VALUE ...]] [--color-blend-exp VALUE]
+	usage: sloth.py [-h] [-e] [-v] [-f FILE] [-g] [--height-normals VALUE]
+	                [--daemon | --xreal | --quake3] [-d SUF] [-n SUF] [-z SUF]
+	                [-s SUF] [-a SUF] [-p SUF] [-c NAME:COLOR [NAME:COLOR ...]]
+	                [-l VALUE [VALUE ...]] [-i VALUE [VALUE ...]]
+	                [--color-blend-exp VALUE]
 	                [--gt0 | --ge128 | --lt128 | --alpha-test VALUE]
 	                [--no-alpha-shadows] [-r ROOT | -x SUF] [-t FILE] [-o DEST]
 	                PATH [PATH ...]
@@ -48,13 +46,26 @@ Just run sloth.py with Python.
 	  -h, --help            show this help message and exit
 	  -e, --example-config  Prints an example per-directory/shader configuration
 	                        file (default: None)
+	  -v, --verbose         Print debug information to stderr. Supply twice for
+	                        more verbosity. (default: None)
+	  -f FILE, --config FILE
+	                        Read global configuration (takes precedence over
+	                        command line arguments) (default: None)
 	  -g, --guess           Guess additional keywords based on shader (meta)data
 	                        (default: False)
 	  --height-normals VALUE
 	                        Modifier used for generating normals from a heightmap
 	                        (default: 1.0)
-	  --daemon              Use features of the Daemon engine. Makes the shaders
-	                        incompatible with vanilla XreaL. (default: False)
+	
+	Renderers:
+	  --daemon              Use renderer features of the Daemon engine. Makes the
+	                        shaders incompatible with XreaL and Quake3. (default:
+	                        False)
+	  --xreal               Use renderer features of the XreaL engine. Makes the
+	                        shaders incompatible with Quake3. This is the default.
+	                        (default: False)
+	  --quake3              Use renderer features of the vanilla Quake3 engine
+	                        only. (default: False)
 	
 	Texture map suffixes:
 	  -d SUF, --diff SUF    Suffix used by diffuse maps (default: _d)
@@ -106,6 +117,25 @@ Just run sloth.py with Python.
 
 To make use of the texture variant autodetection, add different suffixes to
 your diffuse map names (e.g. wall1\_d.tga, wall2\_d.tga, wall\_n.tga, wall\_s.tga).
+
+Examples
+--------
+
+	./sloth.py textures/source_dir1 textures/source_dir2
+	
+Generates two texture sets from the given source directories and prints the resulting shader file.
+
+	./slothy.py -r textures/setname textures/source_dir1 textures/source_dir2 -o scripts/setname.shader
+	
+Uses the same source directories but creates a single set in the "textures/setname" namespace and writes the output to the file "scripts/setname.shader".
+
+	./sloth.py --daemon textures/setname_src -o scripts/setname.shader
+
+Generates a shader file for the Daemon engine (e.g. Unvanquished). The "_src" extension of the texture source folder will be stripped for the set name (see the -x/--strip switch).
+
+	./sloth.py -e > textures/setname_src/options.sloth
+	
+Generates an example configuration file and writes it to "textures/setname_src/options.sloth" where it will be used as a per-directory configuration.
 
 License
 -------
