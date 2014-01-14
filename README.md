@@ -1,13 +1,12 @@
 Sloth
 =====
 
-Generates XreaL/Daemon shader files from directories of texture maps
+Generates Quake3/XreaL/Daemon shader files from directories of texture maps
 
 Features
 --------
 
-Sloth is a Python console application that generates XreaL/Deamon (e.g.
-Unvanquished) compatible shader files given a texture map source directory.
+Sloth is a Python console application that generates Quake3/XreaL/Daemon compatible shader files given a texture map source directory.
 
 * Supports diffuse, normal, height, specular and addition maps as well as preview images
 * Generates light emitting shaders from addition maps given a number of named colors and intensities
