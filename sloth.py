@@ -367,7 +367,20 @@ class ShaderGenerator(dict):
 		# addition map
 		if shader["addition"]:
 			img = Image.open(shader["abspath"]+os.path.sep+shader["addition"]+shader["ext"]["addition"], "r")
-			shader["meta"]["additionGrayscale"] = ( img.mode in ("L", "LA") )
+
+			gray = ( img.mode in ("L", "LA") )
+
+			# check for RGB images with no actual non-gray color
+			if not gray:
+				colors = img.getcolors(maxcolors = 256)
+				if colors:
+					gray = True
+					for _, rgb in colors:
+						if not rgb[0] == rgb[1] == rgb[2]:
+							gray = False
+							break
+
+			shader["meta"]["additionGrayscale"] = gray
 		else:
 			shader["meta"]["additionGrayscale"] = False
 
