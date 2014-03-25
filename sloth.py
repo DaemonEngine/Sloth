@@ -362,7 +362,18 @@ class ShaderGenerator(dict):
 		"Retrieves metadata from a shader's maps, such as whether there's an alpha channel on the diffuse map."
 		# diffuse map
 		img = Image.open(shader["abspath"]+os.path.sep+shader["diffuse"]+shader["ext"]["diffuse"], "r")
-		shader["meta"]["diffuseAlpha"] = ( img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info) )
+
+		# look for transparency
+		if img.mode in ("RGBA", "LA"):
+			if img.getextrema()[-1][0] == 255:
+				self.verbose("Found completely white alpha channel in "+img.filename+".")
+				shader["meta"]["diffuseAlpha"] = False
+			else:
+				shader["meta"]["diffuseAlpha"] = True
+		elif img.mode == "p" and "transparency" in img.info:
+			shader["meta"]["diffuseAlpha"] = True
+		else:
+			shader["meta"]["diffuseAlpha"] = False
 
 		# addition map
 		if shader["addition"]:
