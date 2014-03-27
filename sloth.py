@@ -24,6 +24,7 @@ class ShaderGenerator(dict):
 
 	# valid color format
 	colorRE = re.compile("^[0-9a-f]{6}$")
+	binaryAlphaRE = re.compile(b"^[\x00\xff]*$")
 
 	# mapping from surfaceparm values to words that trigger their use when keyword guessing is enabled
 	surfaceParms = \
@@ -375,6 +376,13 @@ class ShaderGenerator(dict):
 		else:
 			shader["meta"]["diffuseAlpha"] = False
 
+		# check if transparency is binary
+		shader["meta"]["diffuseAlphaBin"] = False
+		if shader["meta"]["diffuseAlpha"]:
+			alphaSequence = img.split()[-1].tobytes()
+			if self.binaryAlphaRE.match(alphaSequence):
+				shader["meta"]["diffuseAlphaBin"] = True
+
 		# addition map
 		if shader["addition"]:
 			img = Image.open(shader["abspath"]+os.path.sep+shader["addition"]+shader["ext"]["addition"], "r")
@@ -413,6 +421,8 @@ class ShaderGenerator(dict):
 					keywords["alphaFunc"] = {options["alphaTest"]}
 				else:
 					keywords["alphaTest"] = {"%.2f" % options["alphaTest"]}
+			elif shader["meta"]["diffuseAlphaBin"]:
+				keywords["alphaFunc"] = "GE128"
 
 			if options["alphaShadows"]:
 				keywords["surfaceparm"].add("alphashadows")
@@ -705,7 +715,7 @@ class ShaderGenerator(dict):
 
 				# diffuse map
 				if shader["diffuse"]:
-					if shader["meta"]["diffuseAlpha"] and not shader["options"]["alphaTest"]:
+					if shader["meta"]["diffuseAlpha"] and not shader["meta"]["diffuseAlphaBin"] and not shader["options"]["alphaTest"]:
 						content += "\t{\n"+\
 						           "\t\tmap   "+path+shader["diffuse"]+"\n"+\
 						           "\t\tblend blend\n"+\
@@ -917,16 +927,16 @@ if __name__ == "__main__":
 	gm = g.add_mutually_exclusive_group()
 
 	gm.add_argument("--gt0", action="store_true",
-	               help="Use alphaFunc GT0 instead of smooth alpha blending.")
+	               help="Always use alphaFunc GT0 instead of smooth alpha blending.")
 
 	gm.add_argument("--ge128", action="store_true",
-	               help="Use alphaFunc GE128 instead of smooth alpha blending.")
+	               help="Always use alphaFunc GE128 instead of smooth alpha blending.")
 
 	gm.add_argument("--lt128", action="store_true",
-	               help="Use alphaFunc LT128 instead of smooth alpha blending.")
+	               help="Always use alphaFunc LT128 instead of smooth alpha blending.")
 
 	gm.add_argument("--alpha-test", metavar="VALUE", type=float,
-	               help="Use alphaTest instead of smooth alpha blending.")
+	               help="Always use alphaTest instead of smooth alpha blending.")
 
 	g.add_argument("--no-alpha-shadows", action="store_true",
 	               help="Don't add the alphashadows surfaceparm.")
