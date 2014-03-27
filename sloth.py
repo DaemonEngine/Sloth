@@ -535,7 +535,7 @@ class ShaderGenerator(dict):
 		self.__copyOptions(self, options)
 
 		if self.defaultSlothFile in filelist:
-			self.verbose("Parsing per-directory options file for "+relpath+"...")
+			self.debug("Parsing per-directory options file for "+relpath+"...")
 			self.__parseSlothFile(options, abspath+os.path.sep+self.defaultSlothFile)
 
 		# add a shader for each diffuse map
@@ -562,9 +562,9 @@ class ShaderGenerator(dict):
 				slothname += shadername[pos]
 				if slothname in slothfiles:
 					if slothname != shadername:
-						self.verbose("Parsing per-prefix options file for "+shadername+" ("+slothname+"*)...")
+						self.debug("Parsing per-prefix options file for "+shadername+" ("+slothname+"*)...")
 					else:
-						self.verbose("Parsing per-shader options file for "+shadername+"...")
+						self.debug("Parsing per-shader options file for "+shadername+"...")
 					self.__parseSlothFile(shader, abspath+os.path.sep+slothname+self.slothFileExt)
 
 			# attempt to find a map of every known non-diffuse type
