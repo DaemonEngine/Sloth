@@ -758,13 +758,13 @@ class ShaderGenerator(dict):
 
 					# color
 					if "lightColor" in shader["meta"]:
-						content += "\tq3map_lightRGB      "+"%.2f %.2f %.2f" % (r, g, b)+"\n\n"
+						content += "\tq3map_lightRGB      "+"%.3f %.3f %.3f" % (r, g, b)+"\n\n"
 					elif shader["addition"]:
 						content += "\tq3map_lightImage    "+shader["addition"]+"\n\n"
 					elif shader["diffuse"]:
 						content += "\tq3map_lightImage    "+shader["diffuse"]+"\n\n"
 					else:
-						content += "\tq3map_lightRGB      1.00 1.00 1.00\n\n"
+						content += "\tq3map_lightRGB      1.000 1.000 1.000\n\n"
 
 				# diffuse map
 				if shader["diffuse"]:
@@ -825,9 +825,9 @@ class ShaderGenerator(dict):
 						           "\t\tblend add\n"
 						if "lightColor" in shader["meta"] and r + g + b < 3.0:
 							content += \
-							       "\t\tred   "+"%.2f" % self.__radToAdd(shader, r)+"\n"+\
-							       "\t\tgreen "+"%.2f" % self.__radToAdd(shader, g)+"\n"+\
-							       "\t\tblue  "+"%.2f" % self.__radToAdd(shader, b)+"\n"
+							       "\t\tred   "+"%.3f" % self.__radToAdd(shader, r)+"\n"+\
+							       "\t\tgreen "+"%.3f" % self.__radToAdd(shader, g)+"\n"+\
+							       "\t\tblue  "+"%.3f" % self.__radToAdd(shader, b)+"\n"
 						content += "\t}\n"
 
 				content += "}\n"
