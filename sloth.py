@@ -62,6 +62,7 @@ class ShaderGenerator(dict):
 		self["options"]["lightColors"]      = dict() # color name -> RGB color triple
 		self["options"]["customLights"]     = dict() # intensity name -> intensity; for grayscale addition maps
 		self["options"]["predefLights"]     = dict() # intensity name -> intensity; for non-grayscale addition maps
+		self["options"]["precalcColors"]    = False  # whether to precalculate fixed light colors
 		self["options"]["guessKeywords"]    = False  # whether to try to guess additional keywords based on shader (meta)data
 		self["options"]["radToAddExp"]      = 1.0    # exponent used to convert radiosity RGB values into addition map color modifiers
 		self["options"]["heightNormalsMod"] = 1.0    # modifier used when generating normals from height maps
@@ -251,6 +252,17 @@ class ShaderGenerator(dict):
 		self.__addLightIntensity(intensity, False)
 
 
+	def __setPrecalcColors(self, value, shader = None):
+		if not shader:
+			shader = self
+
+		shader["options"]["precalcColors"] = value
+
+	def setPrecalcColors(self, value = True):
+		"Whether to precalculate light colors for light emitting shaders with predefined colors."
+		self.__setPrecalcColors(value)
+
+
 	def __setRenderer(self, renderer, shader = None):
 		if not shader:
 			shader = self
@@ -325,6 +337,9 @@ class ShaderGenerator(dict):
 
 						for intensity in options["predefLights"].split():
 							self.__addLightIntensity(int(intensity), False, shader)
+
+					elif option == "precalcColors":
+						self.__setPrecalcColors(options.getboolean(option), shader)
 
 					elif option == "addPredefLights":
 						for intensity in options[option].split():
@@ -419,8 +434,24 @@ class ShaderGenerator(dict):
 							break
 
 			shader["meta"]["additionGrayscale"] = gray
+
+			# get average color if needed
+			if shader["options"]["precalcColors"]:
+				value = channel = 0
+				average = [0, 0, 0]
+				for count in img.histogram():
+					average[channel] += count * value
+					value += 1
+					if value == 256:
+						average[channel] /= img.size[0] * img.size[1]
+						value = 0
+						channel += 1
+				shader["meta"]["additionAverage"] = average
+			else:
+				shader["meta"]["additionAverage"] = None
 		else:
 			shader["meta"]["additionGrayscale"] = False
+			shader["meta"]["additionAverage"]   = None
 
 
 	def __addKeywords(self, shader):
@@ -486,7 +517,7 @@ class ShaderGenerator(dict):
 				delNames.add(shadername)
 
 				if shader["meta"]["additionGrayscale"]:
-					# the addition map is grayscale, so
+					# the addition map is grayscale, use custom light colors
 					for colorName, (r, g, b) in shader["options"]["lightColors"].items():
 						for intensityName, intensity in shader["options"]["customLights"].items():
 							newShader = copy.deepcopy(shader)
@@ -500,6 +531,11 @@ class ShaderGenerator(dict):
 						newShader = copy.deepcopy(shader)
 
 						newShader["meta"]["lightIntensity"]  = intensity
+
+						# if requested, use the precalculated light color
+						if shader["options"]["precalcColors"] and shader["meta"]["additionAverage"]:
+							(r, g, b) = shader["meta"]["additionAverage"]
+							newShader["meta"]["lightColor"]      = {"r": r, "g": g, "b": b}
 
 						newShaders[shadername+"_"+intensityName] = newShader
 
@@ -840,6 +876,9 @@ class ExampleConfig(argparse.Action):
 # Corresponds to --predef-lights
 #predefLights = 100 200
 
+# Corresponds to --precalc-colors
+#precalcColors = on
+
 # Like "predefLights" but doesn't clear previous values
 #addPredefLights = 300 400
 
@@ -958,6 +997,9 @@ if __name__ == "__main__":
 	g.add_argument("-i", "--predef-lights", metavar="VALUE", type=int, nargs="+", default=[0,200],
 	               help="Add light intensities for light emitting shaders with predefined colors (non-grayscale addition map)")
 
+	g.add_argument("--precalc-colors", action="store_true",
+                   help="Precalculate light colors for light emitting shaders with predefined colors.")
+
 	g.add_argument("--color-blend-exp", metavar="VALUE", type=float, default=1.0,
 	               help="Exponent applied to custom light color channels for use in the addition map blend phase")
 
@@ -1022,6 +1064,7 @@ if __name__ == "__main__":
 	sg.setHeightNormalsMod(a.height_normals)
 	sg.setAlphaShadows(not a.no_alpha_shadows)
 	sg.setEditorOpacity(a.editor_opacity)
+	sg.setPrecalcColors(a.precalc_colors)
 
 	if a.header:
 		sg.setHeader(a.header.read())
