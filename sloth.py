@@ -416,14 +416,6 @@ class ShaderGenerator(dict):
 			keywords["surfaceparm"].add("trans")
 			keywords["cull"] = {"none"}
 
-			if options["alphaTest"]:
-				if type(options["alphaTest"]) == str:
-					keywords["alphaFunc"] = {options["alphaTest"]}
-				else:
-					keywords["alphaTest"] = {"%.2f" % options["alphaTest"]}
-			elif shader["meta"]["diffuseAlphaBin"]:
-				keywords["alphaFunc"] = "GE128"
-
 			if options["alphaShadows"]:
 				keywords["surfaceparm"].add("alphashadows")
 
@@ -715,7 +707,23 @@ class ShaderGenerator(dict):
 
 				# diffuse map
 				if shader["diffuse"]:
-					if shader["meta"]["diffuseAlpha"] and not shader["meta"]["diffuseAlphaBin"] and not shader["options"]["alphaTest"]:
+					if shader["options"]["alphaTest"]:
+						if type(options["alphaTest"]) == str:
+							content += "\t{\n"+\
+									   "\t\tmap       "+path+shader["diffuse"]+"\n"+\
+									   "\t\talphaFunc "+shader["options"]["alphaTest"]+"\n"+\
+									   "\t}\n"
+						else:
+							content += "\t{\n"+\
+									   "\t\tmap       "+path+shader["diffuse"]+"\n"+\
+									   "\t\talphaTest "+"%.2f"%shader["options"]["alphaTest"]+"\n"+\
+									   "\t}\n"
+					elif shader["meta"]["diffuseAlphaBin"]:
+						content += "\t{\n"+\
+								   "\t\tmap       "+path+shader["diffuse"]+"\n"+\
+								   "\t\talphaFunc GE128\n"+\
+								   "\t}\n"
+					elif shader["meta"]["diffuseAlpha"]:
 						content += "\t{\n"+\
 						           "\t\tmap   "+path+shader["diffuse"]+"\n"+\
 						           "\t\tblend blend\n"+\
