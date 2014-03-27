@@ -65,6 +65,7 @@ class ShaderGenerator(dict):
 		self["options"]["guessKeywords"]    = False  # whether to try to guess additional keywords based on shader (meta)data
 		self["options"]["radToAddExp"]      = 1.0    # exponent used to convert radiosity RGB values into addition map color modifiers
 		self["options"]["heightNormalsMod"] = 1.0    # modifier used when generating normals from height maps
+		self["options"]["editorOpacity"]    = 1.0    # in-editor opacity of transparent shaders
 		self["options"]["alphaTest"]        = None   # whether to use an alphaFunc/alphaTest keyword or smooth blending (default)
 		self["options"]["alphaShadows"]     = True   # whether to add the alphashadows surfaceparm keyword to relevant shaders
 		self["options"]["renderer"]         = self.defaultRenderer
@@ -110,7 +111,7 @@ class ShaderGenerator(dict):
 
 
 	def readConfig(self, fp):
-		self.verbose("Parsing global options file...")
+		self.debug("Parsing global options file...")
 		self.__parseSlothFile(self, fp)
 
 
@@ -152,6 +153,20 @@ class ShaderGenerator(dict):
 		self.__setHeightNormalsMod(value)
 
 
+	def __setEditorOpacity(self, value, shader = None):
+		if not shader:
+			shader = self
+
+		if type(value) == float and 0 < value <= 1:
+			shader["options"]["editorOpacity"] = value
+		else:
+			self.error("Editor transparency must be a float in ]0,1].")
+
+	def setEditorOpacity(self, value):
+			"Set the in-editor opacity of transparent shaders"
+			self.__setEditorOpacity(value)
+
+
 	def __setAlphaTest(self, test, shader = None):
 		if not shader:
 			shader = self
@@ -163,7 +178,8 @@ class ShaderGenerator(dict):
 		elif test == None:
 			shader["options"]["alphaTest"] = None
 		else:
-			self.error("Alpha test must be either None, a valid string or a float between 0 and 1.")
+			shader["options"]["alphaTest"] = None
+			self.error("Alpha test must be either None, a valid string or a float in [0,1].")
 
 	def setAlphaTest(self, test):
 		"Set the alpha test method used, blend smoothly if None."
@@ -338,6 +354,9 @@ class ShaderGenerator(dict):
 
 					elif option == "heightNormalsMod":
 						self.__setHeightNormalsMod(options.getfloat(option), shader)
+
+					elif option == "editorOpacity":
+						self.__setEditorOpacity(options.getfloat(option), shader)
 
 					elif option == "renderer":
 						self.__setRenderer(options[option], shader)
@@ -675,7 +694,13 @@ class ShaderGenerator(dict):
 
 				# preview image
 				if preview:
-					content += "\tqer_editorImage     "+path+preview+"\n\n"
+					content += "\tqer_editorImage     "+path+preview+"\n"
+
+					# in-editor transparency
+					if shader["meta"]["diffuseAlpha"] and shader["options"]["editorOpacity"] < 1:
+						content += "\tqer_trans           "+"%.2f"%shader["options"]["editorOpacity"]+"\n"
+
+					content += "\n"
 
 				# keywords
 				if "keywords" in shader and len(shader["keywords"]) > 0:
@@ -838,6 +863,9 @@ class ExampleConfig(argparse.Action):
 # One of "quake3", "xreal" (default), "daemon"
 #renderer = daemon
 
+# Corresponds to --editor-opacity
+#editorOpacity = 0.5
+
 # The "keywords" section sets custom key/value pairs. This overwrites
 # everything between qer_* keywords and the texture map definitions.
 # Multiple values will be expanded to multiple lines with the same keyword.
@@ -889,6 +917,9 @@ if __name__ == "__main__":
 
 	p.add_argument("--height-normals", metavar="VALUE", type=float, default=1.0,
 	               help="Modifier used for generating normals from a heightmap")
+
+	p.add_argument("--editor-opacity", metavar="VALUE", type=float, default=0.5,
+	               help="In-editor opacity of transparent shaders")
 
 	# Renderers
 	g = p.add_argument_group("Renderers")
@@ -990,6 +1021,7 @@ if __name__ == "__main__":
 	sg.setRadToAddExponent(a.color_blend_exp)
 	sg.setHeightNormalsMod(a.height_normals)
 	sg.setAlphaShadows(not a.no_alpha_shadows)
+	sg.setEditorOpacity(a.editor_opacity)
 
 	if a.header:
 		sg.setHeader(a.header.read())
