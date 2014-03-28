@@ -440,18 +440,19 @@ class ShaderGenerator(dict):
 				value = channel = 0
 				average = [0, 0, 0]
 				for count in img.histogram():
-					average[channel] += count * value
+					average[channel] += count * ( value / 0xff )
 					value += 1
-					if value == 256:
+					if value > 0xff:
 						average[channel] /= img.size[0] * img.size[1]
 						value = 0
 						channel += 1
-				shader["meta"]["additionAverage"] = average
-			else:
-				shader["meta"]["additionAverage"] = None
-		else:
-			shader["meta"]["additionGrayscale"] = False
-			shader["meta"]["additionAverage"]   = None
+						if channel == 3:
+							break
+
+				if gray:
+					shader["meta"]["additionAverage"] = (average[0], average[0], average[0])
+				else:
+					shader["meta"]["additionAverage"] = tuple(average)
 
 
 	def __addKeywords(self, shader):
@@ -531,11 +532,6 @@ class ShaderGenerator(dict):
 						newShader = copy.deepcopy(shader)
 
 						newShader["meta"]["lightIntensity"]  = intensity
-
-						# if requested, use the precalculated light color
-						if shader["options"]["precalcColors"] and shader["meta"]["additionAverage"]:
-							(r, g, b) = shader["meta"]["additionAverage"]
-							newShader["meta"]["lightColor"]      = {"r": r, "g": g, "b": b}
 
 						newShaders[shadername+"_"+intensityName] = newShader
 
@@ -759,6 +755,8 @@ class ShaderGenerator(dict):
 					# color
 					if "lightColor" in shader["meta"]:
 						content += "\tq3map_lightRGB      "+"%.3f %.3f %.3f" % (r, g, b)+"\n\n"
+					elif "additionAverage" in shader["meta"]:
+						content += "\tq3map_lightRGB      "+"%.3f %.3f %.3f" % shader["meta"]["additionAverage"]+"\n\n"
 					elif shader["addition"]:
 						content += "\tq3map_lightImage    "+shader["addition"]+"\n\n"
 					elif shader["diffuse"]:
