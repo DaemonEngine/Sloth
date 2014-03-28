@@ -766,27 +766,33 @@ class ShaderGenerator(dict):
 
 				# diffuse map
 				if shader["diffuse"]:
-					if shader["options"]["alphaTest"]:
-						if type(options["alphaTest"]) == str:
-							content += "\t{\n"+\
-									   "\t\tmap       "+path+shader["diffuse"]+"\n"+\
-									   "\t\talphaFunc "+shader["options"]["alphaTest"]+"\n"+\
-									   "\t}\n"
+
+					# with alpha channel
+					if shader["meta"]["diffuseAlpha"]:
+						content += "\t{\n"+\
+						           "\t\tmap       "+path+shader["diffuse"]+"\n"
+
+						if shader["options"]["renderer"] != "quake3":
+							content += "\t\tstage     diffuseMap\n"
+
+						# alphatest forced
+						if shader["options"]["alphaTest"]:
+							if type(options["alphaTest"]) == str:
+								content += "\t\talphaFunc "+shader["options"]["alphaTest"]+"\n"
+							else:
+								content += "\t\talphaTest "+"%.2f"%shader["options"]["alphaTest"]+"\n"
+
+						# alphatest implied by binary alpha values
+						elif shader["meta"]["diffuseAlphaBin"]:
+							content += "\t\talphaFunc GE128\n"
+
+						# smooth blending
 						else:
-							content += "\t{\n"+\
-									   "\t\tmap       "+path+shader["diffuse"]+"\n"+\
-									   "\t\talphaTest "+"%.2f"%shader["options"]["alphaTest"]+"\n"+\
-									   "\t}\n"
-					elif shader["meta"]["diffuseAlphaBin"]:
-						content += "\t{\n"+\
-								   "\t\tmap       "+path+shader["diffuse"]+"\n"+\
-								   "\t\talphaFunc GE128\n"+\
-								   "\t}\n"
-					elif shader["meta"]["diffuseAlpha"]:
-						content += "\t{\n"+\
-						           "\t\tmap   "+path+shader["diffuse"]+"\n"+\
-						           "\t\tblend blend\n"+\
-						           "\t}\n"
+							content += "\t\tblend     blend\n"
+
+						content += "\t}\n"
+
+					# without alpha channel
 					elif shader["options"]["renderer"] != "quake3":
 						content += "\tdiffuseMap          "+path+shader["diffuse"]+"\n"
 					else:
