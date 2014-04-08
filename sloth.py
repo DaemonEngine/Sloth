@@ -468,7 +468,7 @@ class ShaderGenerator(dict):
 			keywords["cull"] = {"none"}
 
 			if options["alphaShadows"]:
-				keywords["surfaceparm"].add("alphashadows")
+				keywords["surfaceparm"].add("alphashadow")
 
 		# attempt to guess additional keywords
 		if options["guessKeywords"]:
