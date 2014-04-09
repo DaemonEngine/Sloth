@@ -777,7 +777,7 @@ class ShaderGenerator(dict):
 
 						# alphatest forced
 						if shader["options"]["alphaTest"]:
-							if type(options["alphaTest"]) == str:
+							if type(shader["options"]["alphaTest"]) == str:
 								content += "\t\talphaFunc "+shader["options"]["alphaTest"]+"\n"
 							else:
 								content += "\t\talphaTest "+"%.2f"%shader["options"]["alphaTest"]+"\n"
