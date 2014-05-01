@@ -574,7 +574,7 @@ class ShaderGenerator(dict):
 		# add a new set or extend the current one
 		if not setname:
 			if cutextension and len(cutextension) > 0:
-				setname = relpath.rsplit(cutextension)[0]
+				setname = relpath.rsplit(cutextension, 1)[0]
 			else:
 				setname = relpath
 
@@ -591,7 +591,7 @@ class ShaderGenerator(dict):
 
 		# add a shader for each diffuse map
 		for diffusename in mapsbytype["diffuse"]:
-			shadername = diffusename.rsplit(self.suffixes["diffuse"])[0]
+			shadername = diffusename.rsplit(self.suffixes["diffuse"], 1)[0]
 
 			# add a new shader
 			shader = self.sets[setname][shadername] = dict()
