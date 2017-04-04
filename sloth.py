@@ -49,6 +49,14 @@ class ShaderGenerator(dict):
 	# basename of the per-set option file
 	defaultSlothFile = "options"+slothFileExt
 
+	# common file extensions for image source
+	extBlackList = \
+	[
+		".ora",
+		".psd",
+		".xcf",
+	]
+
 
 	def __init__(self, verbosity = 0):
 		self.verbosity        = verbosity
@@ -562,6 +570,11 @@ class ShaderGenerator(dict):
 		# retrieve all maps by type
 		for filename in filelist:
 			mapname, ext = os.path.splitext(filename)
+
+			# check if this file extension is not among known unsupported ones
+			if ext.lower() in self.extBlackList:
+				self.verbose(filename + ": Unsupported format")
+				continue	
 
 			if ext == self.slothFileExt:
 				slothfiles.add(mapname)
