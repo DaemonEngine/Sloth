@@ -559,6 +559,14 @@ class ShaderGenerator(dict):
 
 		# retrieve all maps by type
 		for filename in filelist:
+			# check if known picture format
+			try:
+				Image.open(os.path.join(abspath, filename))
+			except OSError:
+				continue
+			except:
+			    raise
+
 			mapname, ext = os.path.splitext(filename)
 
 			if ext == self.slothFileExt:
