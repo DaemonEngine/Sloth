@@ -423,6 +423,8 @@ class ShaderGenerator(dict):
 
 			gray = ( img.mode in ("L", "LA") )
 
+			img = img.convert("RGB")
+
 			# check for RGB images with no actual non-gray color
 			if not gray:
 				colors = img.getcolors(maxcolors = 256)
