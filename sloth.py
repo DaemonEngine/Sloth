@@ -975,7 +975,8 @@ if __name__ == "__main__":
 	                help="Use renderer features of the Daemon engine. Makes the shaders incompatible with XreaL and Quake3.")
 
 	gm.add_argument("--xreal", action="store_true",
-	               help="Use renderer features of the XreaL engine. Makes the shaders incompatible with Quake3. This is the default.")
+	               default="--" + ShaderGenerator.defaultRenderer,
+	               help="Use renderer features of the XreaL engine. Makes the shaders incompatible with Quake3.")
 
 	gm.add_argument("--quake3", action="store_true",
 	                help="Use renderer features of the vanilla Quake3 engine only.")
