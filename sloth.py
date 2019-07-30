@@ -718,6 +718,9 @@ class ShaderGenerator(dict):
 
 				names = sorted(self.sets[setname].keys())
 
+			# is a stage currently opened?
+			in_stage = False
+
 			for shadername in names:
 				# prepare content
 				shader = self.sets[setname][shadername]
@@ -781,14 +784,21 @@ class ShaderGenerator(dict):
 
 				# diffuse map
 				if shader["diffuse"]:
+					if shader["options"]["renderer"] == "daemon":
+						if not in_stage:
+							content += "\t{\n"
+							in_stage = True
+
+						content += "\t\tdiffuseMap  "+path+shader["diffuse"]+"\n"
 
 					# with alpha channel
 					if shader["meta"]["diffuseAlpha"]:
-						content += "\t{\n"+\
-						           "\t\tmap       "+path+shader["diffuse"]+"\n"
+						if shader["options"]["renderer"] != "daemon":
+							content += "\t{\n"+\
+							           "\t\tmap       "+path+shader["diffuse"]+"\n"
 
-						if shader["options"]["renderer"] != "quake3":
-							content += "\t\tstage     diffuseMap\n"
+							if shader["options"]["renderer"] != "quake3":
+								content += "\t\tstage     diffuseMap\n"
 
 						# alphatest forced
 						if shader["options"]["alphaTest"]:
@@ -808,46 +818,80 @@ class ShaderGenerator(dict):
 						content += "\t}\n"
 
 					# without alpha channel
-					elif shader["options"]["renderer"] != "quake3":
+					elif shader["options"]["renderer"] == "xreal":
 						content += "\tdiffuseMap          "+path+shader["diffuse"]+"\n"
-					else:
+					elif shader["options"]["renderer"] == "quake3":
 						content += "\t{\n"+\
 						           "\t\tmap   "+path+shader["diffuse"]+"\n"+\
 						           "\t}\n"
 
 				# normal & height map
-				if shader["options"]["renderer"] != "quake3":
-					if shader["normal"]:
+				if shader["normal"]:
+					if shader["options"]["renderer"] == "daemon":
+						if not in_stage:
+							content += "\t{\n"
+							in_stage = True
+
+						content += "\t\tnormalMap   "+path+shader["normal"]+"\n"
+
+					elif shader["options"]["renderer"] == "xreal":
 						if shader["height"] and shader["options"]["heightNormalsMod"] > 0:
 							content += "\tnormalMap           addnormals ( "+path+shader["normal"]+\
 									   ", heightmap ( "+path+shader["height"]+", "+\
 									   "%.2f" % shader["options"]["heightNormalsMod"]+" ) )\n"
 						else:
 							content += "\tnormalMap           "+path+shader["normal"]+"\n"
-					elif shader["height"] and shader["options"]["heightNormalsMod"] > 0:
+
+				elif shader["height"] and shader["options"]["heightNormalsMod"] > 0:
+					if shader["options"]["renderer"] == "xreal":
 						content += "\tnormalMap           heightmap ( "+path+shader["height"]+", "+\
 								   "%.2f" % shader["options"]["heightNormalsMod"]+" )\n"
 
 				# specular map
-				if shader["options"]["renderer"] != "quake3":
-					if shader["specular"]:
+				if shader["specular"]:
+					if shader["options"]["renderer"] == "daemon":
+						if not in_stage:
+							content += "\t{\n"
+							in_stage = True
+
+						content += "\t\tspecularMap "+path+shader["specular"]+"\n"
+
+					elif shader["options"]["renderer"] == "quake3":
 						content += "\tspecularMap         "+path+shader["specular"]+"\n"
 
 				# addition map
 				if shader["addition"]:
-					if shader["options"]["renderer"] == "daemon" \
-					and ("lightColor" not in shader["meta"] or r == b == g == 1.0):
+					has_light_color = "lightColor" in shader["meta"] and r + g + b < 3.0
+
+					if shader["options"]["renderer"] == "daemon":
+						if not in_stage:
+							content += "\t{\n"
+							in_stage = True
+
+						content += "\t\tglowMap     "+path+shader["addition"]+"\n"
+
+					elif shader["options"]["renderer"] == "xreal" and not has_light_color:
 						content += "\tglowMap             "+path+shader["addition"]+"\n"
-					else:
+
+					elif shader["options"]["renderer"] == "quake3"\
+					or (shader["options"]["renderer"] == "xreal" and has_light_color):
 						content += "\t{\n"+\
 						           "\t\tmap   "+path+shader["addition"]+"\n"+\
 						           "\t\tblend add\n"
-						if "lightColor" in shader["meta"] and r + g + b < 3.0:
+
+					if shader["options"]["renderer"] in ["daemon", "xreal", "quake3"] and has_light_color:
 							content += \
 							       "\t\tred   "+"%.3f" % self.__radToAdd(shader, r)+"\n"+\
 							       "\t\tgreen "+"%.3f" % self.__radToAdd(shader, g)+"\n"+\
 							       "\t\tblue  "+"%.3f" % self.__radToAdd(shader, b)+"\n"
+
+					elif shader["options"]["renderer"] == "quake3"\
+					or (shader["options"]["renderer"] == "xreal" and has_light_color):
 						content += "\t}\n"
+
+				if in_stage and shader["options"]["renderer"] == "daemon":
+					content += "\t}\n"
+					in_stage = False
 
 				content += "}\n"
 
