@@ -308,7 +308,7 @@ class ShaderGenerator(dict):
 				config.read_string(path.read())
 			else:
 				with open(path, "r") as fp:
-					config.readfp(fp)
+					config.read_file(fp)
 		except IOError:
 			self.error("Couldn't read "+path+".")
 			return
