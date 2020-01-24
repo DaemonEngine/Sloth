@@ -777,9 +777,9 @@ class ShaderGenerator(dict):
 					elif "additionAverage" in shader["meta"]:
 						content += "\tq3map_lightRGB      "+"%.3f %.3f %.3f" % shader["meta"]["additionAverage"]+"\n\n"
 					elif shader["addition"]:
-						content += "\tq3map_lightImage    "+shader["addition"]+"\n\n"
+						content += "\tq3map_lightImage    "+path+shader["addition"]+"\n\n"
 					elif shader["diffuse"]:
-						content += "\tq3map_lightImage    "+shader["diffuse"]+"\n\n"
+						content += "\tq3map_lightImage    "+path+shader["diffuse"]+"\n\n"
 					else:
 						content += "\tq3map_lightRGB      1.000 1.000 1.000\n\n"
 
