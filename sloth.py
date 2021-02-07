@@ -109,14 +109,15 @@ class ShaderGenerator(dict):
 		self.header = text
 
 
-	def setSuffixes(self, diffuse = "_d", normal = "_n", height = "_h", specular = "_s", addition = "_a", preview = "_p"):
+	def setSuffixes(self, diffuse = "_d", normal = "_n", normalheight = "_nh", height = "_h", specular = "_s", addition = "_a", preview = "_p"):
 		"Sets the filename suffixes for the different texture map types."
-		self.suffixes["diffuse"]  = diffuse
-		self.suffixes["normal"]   = normal
-		self.suffixes["height"]   = height
-		self.suffixes["specular"] = specular
-		self.suffixes["addition"] = addition
-		self.suffixes["preview"]  = preview
+		self.suffixes["diffuse"]      = diffuse
+		self.suffixes["normal"]       = normal
+		self.suffixes["normalheight"] = normalheight
+		self.suffixes["height"]       = height
+		self.suffixes["specular"]     = specular
+		self.suffixes["addition"]     = addition
+		self.suffixes["preview"]      = preview
 
 
 	def readConfig(self, fp):
@@ -845,10 +846,25 @@ class ShaderGenerator(dict):
 						else:
 							content += "\tnormalMap           "+path+shader["normal"]+"\n"
 
-				elif shader["height"] and shader["options"]["heightNormalsMod"] > 0:
-					if shader["options"]["renderer"] == "xreal":
+				if not shader["normal"] and shader["height"] and shader["options"]["heightNormalsMod"] > 0 and shader["options"]["renderer"] == "xreal":
 						content += "\tnormalMap           heightmap ( "+path+shader["height"]+", "+\
 								   "%.2f" % shader["options"]["heightNormalsMod"]+" )\n"
+
+				if shader["normalheight"]:
+					if shader["options"]["renderer"] == "daemon":
+						if not in_stage:
+							content += "\t{\n"
+							in_stage = True
+
+						content += "\t\tnormalHeightMap       "+path+shader["normalheight"]+"\n"
+
+				if shader["height"]:
+					if shader["options"]["renderer"] == "daemon":
+						if not in_stage:
+							content += "\t{\n"
+							in_stage = True
+
+						content += "\t\theightMap       "+path+shader["height"]+"\n"
 
 				# specular map
 				if shader["specular"]:
