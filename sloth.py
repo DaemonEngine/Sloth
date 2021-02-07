@@ -1079,24 +1079,24 @@ if __name__ == "__main__":
 	# Texture map suffixes
 	g = p.add_argument_group("Texture map suffixes")
 
-	g.add_argument("-d", "--diff",   metavar="SUF", default="_d", help="Suffix used by diffuse maps")
-	g.add_argument("-n", "--normal", metavar="SUF", default="_n", help="Suffix used by normal maps")
-	g.add_argument("-z", "--height", metavar="SUF", default="_h", help="Suffix used by height maps")
-	g.add_argument("-s", "--spec",   metavar="SUF", default="_s", help="Suffix used by specular maps")
-	g.add_argument("-a", "--add",    metavar="SUF", default="_a", help="Suffix used by addition/glow maps")
-	g.add_argument("-p", "--prev",   metavar="SUF", default="_p", help="Suffix used by preview images")
+	g.add_argument("--diff",   metavar="SUF", default="_d", help="Suffix used by diffuse maps")
+	g.add_argument("--normal", metavar="SUF", default="_n", help="Suffix used by normal maps")
+	g.add_argument("--height", metavar="SUF", default="_h", help="Suffix used by height maps")
+	g.add_argument("--spec",   metavar="SUF", default="_s", help="Suffix used by specular maps")
+	g.add_argument("--add",    metavar="SUF", default="_a", help="Suffix used by addition/glow maps")
+	g.add_argument("--prev",   metavar="SUF", default="_p", help="Suffix used by preview images")
 
 	# Light emitting shaders
 	g = p.add_argument_group("Light emitting shaders")
 
-	g.add_argument("-c", "--colors", metavar="NAME:COLOR", nargs="+", default=["white:ffffff"],
+	g.add_argument("--colors", metavar="NAME:COLOR", nargs="+", default=["white:ffffff"],
 	               help="Add light colors with the given name, using a RGB hex triplet. "
 	                    "They will only be used in combination with grayscale addition maps.")
 
-	g.add_argument("-l", "--custom-lights", metavar="VALUE", type=int, nargs="+", default=[1000,2000,4000],
+	g.add_argument("--custom-lights", metavar="VALUE", type=int, nargs="+", default=[1000,2000,4000],
 	               help="Add light intensities for light emitting shaders with custom colors (grayscale addition map)")
 
-	g.add_argument("-i", "--predef-lights", metavar="VALUE", type=int, nargs="+", default=[0,200],
+	g.add_argument("--predef-lights", metavar="VALUE", type=int, nargs="+", default=[0,200],
 	               help="Add light intensities for light emitting shaders with predefined colors (non-grayscale addition map)")
 
 	g.add_argument("--precalc-colors", action="store_true",
@@ -1132,10 +1132,10 @@ if __name__ == "__main__":
 	               help="Sets the namespace for the set (e.g. textures/setname). "
 	                    "Can be used to merge source folders into a single set.")
 
-	gm.add_argument("-x", "--strip", metavar="SUF", default="_src",
+	gm.add_argument("--strip", metavar="SUF", default="_src",
 	               help="Strip suffix from source folder names when generating the set name")
 
-	g.add_argument("-t", "--header", metavar="FILE", type=argparse.FileType("r"),
+	g.add_argument("--header", metavar="FILE", type=argparse.FileType("r"),
 	               help="Use file content as a header, \"// \" will be prepended to each line")
 
 	g.add_argument("-o", "--out", metavar="DEST", type=argparse.FileType("w"),
