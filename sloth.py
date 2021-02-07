@@ -1088,14 +1088,14 @@ if __name__ == "__main__":
 	# Texture map suffixes
 	g = p.add_argument_group("Texture map suffixes")
 
-	g.add_argument("--diff",   metavar="SUF", default=defaultSuffixes["diffuse"], help="Suffix used by diffuse maps")
-	g.add_argument("--normal", metavar="SUF", default=defaultSuffixes["normal"], help="Suffix used by normal maps")
+	g.add_argument("--diffuse",         metavar="SUF", default=defaultSuffixes["diffuse"],      help="Suffix used by diffuse maps")
+	g.add_argument("--normal",          metavar="SUF", default=defaultSuffixes["normal"],       help="Suffix used by normal maps")
 	g.add_argument("--normalheight",    metavar="SUF", default=defaultSuffixes["normalheight"], help="Suffix used by normal+height maps")
-	g.add_argument("--height", metavar="SUF", default=defaultSuffixes["height"], help="Suffix used by height maps")
+	g.add_argument("--height",          metavar="SUF", default=defaultSuffixes["height"],       help="Suffix used by height maps")
 	g.add_argument("--physical",        metavar="SUF", default=defaultSuffixes["physical"],     help="Suffix used by physical maps")
-	g.add_argument("--spec",   metavar="SUF", default=defaultSuffixes["specular"], help="Suffix used by specular maps")
-	g.add_argument("--add",    metavar="SUF", default=defaultSuffixes["addition"], help="Suffix used by addition/glow maps")
-	g.add_argument("--prev",   metavar="SUF", default=defaultSuffixes["preview"], help="Suffix used by preview images")
+	g.add_argument("--specular",        metavar="SUF", default=defaultSuffixes["specular"],     help="Suffix used by specular maps")
+	g.add_argument("--addition",        metavar="SUF", default=defaultSuffixes["addition"],     help="Suffix used by addition/glow maps")
+	g.add_argument("--preview",         metavar="SUF", default=defaultSuffixes["preview"],      help="Suffix used by preview images")
 
 	# Light emitting shaders
 	g = p.add_argument_group("Light emitting shaders")
@@ -1162,8 +1162,8 @@ if __name__ == "__main__":
 
 	sg = ShaderGenerator(verbosity)
 
-	sg.setSuffixes(diffuse = a.diff, normal = a.normal, height = a.height,
-	               specular = a.spec, addition = a.add, preview = a.prev)
+	sg.setSuffixes(diffuse = a.diffuse, normal = a.normal, height = a.height,
+	               specular = a.specular, addition = a.addition, preview = a.preview)
 
 	if a.quake3:
 		sg.setRenderer("quake3")
