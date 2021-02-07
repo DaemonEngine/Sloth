@@ -1156,10 +1156,10 @@ if __name__ == "__main__":
 
 	if a.quake3:
 		sg.setRenderer("quake3")
-	elif a.daemon:
-		sg.setRenderer("daemon")
-	else:
+	elif a.xreal:
 		sg.setRenderer("xreal")
+	else:
+		sg.setRenderer("daemon")
 
 	sg.setKeywordGuessing(a.guess)
 	sg.setRadToAddExponent(a.color_blend_exp)
