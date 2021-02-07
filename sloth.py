@@ -19,6 +19,16 @@ import sys, os, re, argparse, copy, configparser
 
 from PIL import Image
 
+defaultSuffixes = {
+	"diffuse":      "_d",
+	"normal":       "_n",
+	"normalheight": "_nh",
+	"height":       "_h",
+	"physical":     "_orm",
+	"specular":     "_s",
+	"addition":     "_a",
+	"preview":      "_p",
+}
 
 class ShaderGenerator(dict):
 
@@ -108,8 +118,7 @@ class ShaderGenerator(dict):
 		"Sets a header text to be put at the top of the shader file."
 		self.header = text
 
-
-	def setSuffixes(self, diffuse = "_d", normal = "_n", normalheight = "_nh", height = "_h", physical = "_orm", specular = "_s", addition = "_a", preview = "_p"):
+	def setSuffixes(self, diffuse = defaultSuffixes["diffuse"], normal = defaultSuffixes["normal"], normalheight = defaultSuffixes["normalheight"], height = defaultSuffixes["height"], physical = defaultSuffixes["physical"], specular = defaultSuffixes["specular"], addition = defaultSuffixes["addition"], preview = defaultSuffixes["preview"]):
 		"Sets the filename suffixes for the different texture map types."
 		self.suffixes["diffuse"]      = diffuse
 		self.suffixes["normal"]       = normal
@@ -1079,12 +1088,12 @@ if __name__ == "__main__":
 	# Texture map suffixes
 	g = p.add_argument_group("Texture map suffixes")
 
-	g.add_argument("--diff",   metavar="SUF", default="_d", help="Suffix used by diffuse maps")
-	g.add_argument("--normal", metavar="SUF", default="_n", help="Suffix used by normal maps")
-	g.add_argument("--height", metavar="SUF", default="_h", help="Suffix used by height maps")
-	g.add_argument("--spec",   metavar="SUF", default="_s", help="Suffix used by specular maps")
-	g.add_argument("--add",    metavar="SUF", default="_a", help="Suffix used by addition/glow maps")
-	g.add_argument("--prev",   metavar="SUF", default="_p", help="Suffix used by preview images")
+	g.add_argument("--diff",   metavar="SUF", default=defaultSuffixes["diffuse"], help="Suffix used by diffuse maps")
+	g.add_argument("--normal", metavar="SUF", default=defaultSuffixes["normal"], help="Suffix used by normal maps")
+	g.add_argument("--height", metavar="SUF", default=defaultSuffixes["height"], help="Suffix used by height maps")
+	g.add_argument("--spec",   metavar="SUF", default=defaultSuffixes["specular"], help="Suffix used by specular maps")
+	g.add_argument("--add",    metavar="SUF", default=defaultSuffixes["addition"], help="Suffix used by addition/glow maps")
+	g.add_argument("--prev",   metavar="SUF", default=defaultSuffixes["preview"], help="Suffix used by preview images")
 
 	# Light emitting shaders
 	g = p.add_argument_group("Light emitting shaders")
