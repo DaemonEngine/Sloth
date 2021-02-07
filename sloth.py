@@ -109,12 +109,13 @@ class ShaderGenerator(dict):
 		self.header = text
 
 
-	def setSuffixes(self, diffuse = "_d", normal = "_n", normalheight = "_nh", height = "_h", specular = "_s", addition = "_a", preview = "_p"):
+	def setSuffixes(self, diffuse = "_d", normal = "_n", normalheight = "_nh", height = "_h", physical = "_orm", specular = "_s", addition = "_a", preview = "_p"):
 		"Sets the filename suffixes for the different texture map types."
 		self.suffixes["diffuse"]      = diffuse
 		self.suffixes["normal"]       = normal
 		self.suffixes["normalheight"] = normalheight
 		self.suffixes["height"]       = height
+		self.suffixes["physical"]     = physical
 		self.suffixes["specular"]     = specular
 		self.suffixes["addition"]     = addition
 		self.suffixes["preview"]      = preview
@@ -865,6 +866,15 @@ class ShaderGenerator(dict):
 							in_stage = True
 
 						content += "\t\theightMap       "+path+shader["height"]+"\n"
+
+				# physical map
+				if shader["physical"]:
+					if shader["options"]["renderer"] == "daemon":
+						if not in_stage:
+							content += "\t{\n"
+							in_stage = True
+
+						content += "\t\tphysicalMap     "+path+shader["physical"]+"\n"
 
 				# specular map
 				if shader["specular"]:
