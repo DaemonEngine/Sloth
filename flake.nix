@@ -10,10 +10,10 @@
 
   outputs = { self, nixpkgs }:
     let
-      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+      lib = nixpkgs.legacyPackages.x86_64-linux.lib;
     in {
 
-      defaultPackage.x86_64-linux =
+      defaultPackage = lib.mapAttrs (system: pkgs:
         pkgs.python310.pkgs.buildPythonPackage {
           name = "sloth";
 
@@ -32,12 +32,14 @@
           '';
 
           meta.license = pkgs.lib.licenses.gpl3Plus;
-        };
+        }
+      ) nixpkgs.legacyPackages;
 
-      defaultApp.x86_64-linux = {
-        type = "app";
-        program = "${self.defaultPackage.x86_64-linux}/bin/sloth";
-      };
+      defaultApp = lib.mapAttrs (system: pkgs:
+        { type = "app";
+          program = "${self.defaultPackage."${system}"}/bin/sloth";
+        }
+      ) nixpkgs.legacyPackages;
 
     };
 }
