@@ -14,7 +14,7 @@
     in {
 
       defaultPackage = lib.mapAttrs (system: pkgs:
-        pkgs.python310.pkgs.buildPythonPackage {
+        pkgs.python3.pkgs.buildPythonPackage {
           name = "sloth";
 
           src = pkgs.lib.cleanSource ./.;
@@ -22,7 +22,7 @@
           format = "other";
 
           buildInputs = [
-            (pkgs.python310.withPackages (ps: [ ps.pillow ]))
+            (pkgs.python3.withPackages (ps: [ ps.pillow ]))
           ];
 
           installPhase = ''
