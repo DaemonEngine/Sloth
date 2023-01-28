@@ -703,6 +703,8 @@ class ShaderGenerator(dict):
 		for line in self.header.splitlines():
 			if line.startswith("//"):
 				content += line+"\n"
+			elif line == "":
+				content += "//\n"
 			else:
 				content += "// "+line+"\n"
 
@@ -756,11 +758,11 @@ class ShaderGenerator(dict):
 
 				# preview image
 				if preview:
-					content += "\tqer_editorImage     "+path+preview+"\n"
+					content += "\tqer_editorImage "+path+preview+"\n"
 
 					# in-editor transparency
 					if shader["meta"]["diffuseAlpha"] and shader["options"]["editorOpacity"] < 1:
-						content += "\tqer_trans           "+"%.2f"%shader["options"]["editorOpacity"]+"\n"
+						content += "\tqer_trans "+"%.2f"%shader["options"]["editorOpacity"]+"\n"
 
 					content += "\n"
 
@@ -780,19 +782,19 @@ class ShaderGenerator(dict):
 				# surface light
 				if "lightIntensity" in shader["meta"] and shader["meta"]["lightIntensity"] > 0:
 					# intensity
-					content += "\tq3map_surfacelight  "+"%d" % shader["meta"]["lightIntensity"]+"\n"
+					content += "\tq3map_surfacelight "+"%d" % shader["meta"]["lightIntensity"]+"\n"
 
 					# color
 					if "lightColor" in shader["meta"]:
-						content += "\tq3map_lightRGB      "+"%.3f %.3f %.3f" % (r, g, b)+"\n\n"
+						content += "\tq3map_lightRGB "+"%.3f %.3f %.3f" % (r, g, b)+"\n\n"
 					elif "additionAverage" in shader["meta"]:
-						content += "\tq3map_lightRGB      "+"%.3f %.3f %.3f" % shader["meta"]["additionAverage"]+"\n\n"
+						content += "\tq3map_lightRGB "+"%.3f %.3f %.3f" % shader["meta"]["additionAverage"]+"\n\n"
 					elif shader["addition"]:
-						content += "\tq3map_lightImage    "+path+shader["addition"]+"\n\n"
+						content += "\tq3map_lightImage "+path+shader["addition"]+"\n\n"
 					elif shader["diffuse"]:
-						content += "\tq3map_lightImage    "+path+shader["diffuse"]+"\n\n"
+						content += "\tq3map_lightImage "+path+shader["diffuse"]+"\n\n"
 					else:
-						content += "\tq3map_lightRGB      1.000 1.000 1.000\n\n"
+						content += "\tq3map_lightRGB 1.000 1.000 1.000\n\n"
 
 				# diffuse map
 				if shader["diffuse"]:
@@ -801,16 +803,16 @@ class ShaderGenerator(dict):
 							content += "\t{\n"
 							in_stage = True
 
-						content += "\t\tdiffuseMap      "+path+shader["diffuse"]+"\n"
+						content += "\t\tdiffuseMap "+path+shader["diffuse"]+"\n"
 
 					# with alpha channel
 					if shader["meta"]["diffuseAlpha"]:
 						if shader["options"]["renderer"] != "daemon":
 							content += "\t{\n"+\
-							           "\t\tmap       "+path+shader["diffuse"]+"\n"
+							           "\t\tmap "+path+shader["diffuse"]+"\n"
 
 							if shader["options"]["renderer"] != "quake3":
-								content += "\t\tstage     diffuseMap\n"
+								content += "\t\tstage diffuseMap\n"
 
 						# alphatest forced
 						if shader["options"]["alphaTest"]:
@@ -825,7 +827,7 @@ class ShaderGenerator(dict):
 
 						# smooth blending
 						else:
-							stage_keys += "\t\tblend     blend\n"
+							stage_keys += "\t\tblend blend\n"
 
 						if shader["options"]["renderer"] != "daemon":
 							content += stage_keys;
@@ -833,10 +835,10 @@ class ShaderGenerator(dict):
 
 					# without alpha channel
 					elif shader["options"]["renderer"] == "xreal":
-						content += "\tdiffuseMap          "+path+shader["diffuse"]+"\n"
+						content += "\tdiffuseMap "+path+shader["diffuse"]+"\n"
 					elif shader["options"]["renderer"] == "quake3":
 						content += "\t{\n"+\
-						           "\t\tmap   "+path+shader["diffuse"]+"\n"+\
+						           "\t\tmap "+path+shader["diffuse"]+"\n"+\
 						           "\t}\n"
 
 				# normal & height map
@@ -846,18 +848,18 @@ class ShaderGenerator(dict):
 							content += "\t{\n"
 							in_stage = True
 
-						content += "\t\tnormalMap       "+path+shader["normal"]+"\n"
+						content += "\t\tnormalMap "+path+shader["normal"]+"\n"
 
 					elif shader["options"]["renderer"] == "xreal":
 						if shader["height"] and shader["options"]["heightNormalsMod"] > 0:
-							content += "\tnormalMap           addnormals ( "+path+shader["normal"]+\
+							content += "\tnormalMap addnormals ( "+path+shader["normal"]+\
 									   ", heightmap ( "+path+shader["height"]+", "+\
 									   "%.2f" % shader["options"]["heightNormalsMod"]+" ) )\n"
 						else:
-							content += "\tnormalMap           "+path+shader["normal"]+"\n"
+							content += "\tnormalMap "+path+shader["normal"]+"\n"
 
 				if not shader["normal"] and shader["height"] and shader["options"]["heightNormalsMod"] > 0 and shader["options"]["renderer"] == "xreal":
-						content += "\tnormalMap           heightmap ( "+path+shader["height"]+", "+\
+						content += "\tnormalMap heightmap ( "+path+shader["height"]+", "+\
 								   "%.2f" % shader["options"]["heightNormalsMod"]+" )\n"
 
 				if shader["normalheight"]:
@@ -866,7 +868,7 @@ class ShaderGenerator(dict):
 							content += "\t{\n"
 							in_stage = True
 
-						content += "\t\tnormalHeightMap       "+path+shader["normalheight"]+"\n"
+						content += "\t\tnormalHeightMap "+path+shader["normalheight"]+"\n"
 
 				if shader["height"]:
 					if shader["options"]["renderer"] == "daemon":
@@ -874,7 +876,7 @@ class ShaderGenerator(dict):
 							content += "\t{\n"
 							in_stage = True
 
-						content += "\t\theightMap       "+path+shader["height"]+"\n"
+						content += "\t\theightMap "+path+shader["height"]+"\n"
 
 				# physical map
 				if shader["physical"]:
@@ -883,7 +885,7 @@ class ShaderGenerator(dict):
 							content += "\t{\n"
 							in_stage = True
 
-						content += "\t\tphysicalMap     "+path+shader["physical"]+"\n"
+						content += "\t\tphysicalMap "+path+shader["physical"]+"\n"
 
 				# specular map
 				if shader["specular"]:
@@ -892,10 +894,10 @@ class ShaderGenerator(dict):
 							content += "\t{\n"
 							in_stage = True
 
-						content += "\t\tspecularMap     "+path+shader["specular"]+"\n"
+						content += "\t\tspecularMap "+path+shader["specular"]+"\n"
 
 					elif shader["options"]["renderer"] == "xreal":
-						content += "\tspecularMap         "+path+shader["specular"]+"\n"
+						content += "\tspecularMap "+path+shader["specular"]+"\n"
 
 				# addition map
 				if shader["addition"]:
@@ -906,10 +908,10 @@ class ShaderGenerator(dict):
 							content += "\t{\n"
 							in_stage = True
 
-						content += "\t\tglowMap         "+path+shader["addition"]+"\n"
+						content += "\t\tglowMap "+path+shader["addition"]+"\n"
 
 					elif shader["options"]["renderer"] == "xreal" and not has_light_color:
-						content += "\tglowMap             "+path+shader["addition"]+"\n"
+						content += "\tglowMap "+path+shader["addition"]+"\n"
 
 					elif shader["options"]["renderer"] == "quake3"\
 					or (shader["options"]["renderer"] == "daemon" and has_light_color)\
@@ -920,15 +922,15 @@ class ShaderGenerator(dict):
 							in_stage = False
 
 						stage_keys += "\t{\n"+\
-						           "\t\tmap   "+path+shader["addition"]+"\n"+\
+						           "\t\tmap "+path+shader["addition"]+"\n"+\
 						           "\t\tblend add\n"
 						in_stage = True
 
 					if shader["options"]["renderer"] in ["daemon", "xreal", "quake3"] and has_light_color:
 							stage_keys += \
-							       "\t\tred   "+"%.3f" % self.__radToAdd(shader, r)+"\n"+\
+							       "\t\tred "+"%.3f" % self.__radToAdd(shader, r)+"\n"+\
 							       "\t\tgreen "+"%.3f" % self.__radToAdd(shader, g)+"\n"+\
-							       "\t\tblue  "+"%.3f" % self.__radToAdd(shader, b)+"\n"
+							       "\t\tblue "+"%.3f" % self.__radToAdd(shader, b)+"\n"
 
 					if shader["options"]["renderer"] in ["daemon", "xreal", "quake3"]:
 						content += stage_keys;
@@ -1111,7 +1113,7 @@ if __name__ == "__main__":
 	               help="Add light intensities for light emitting shaders with predefined colors (non-grayscale addition map)")
 
 	g.add_argument("--precalc-colors", action="store_true",
-                   help="Precalculate light colors for light emitting shaders with predefined colors.")
+	               help="Precalculate light colors for light emitting shaders with predefined colors.")
 
 	g.add_argument("--color-blend-exp", metavar="VALUE", type=float, default=1.0,
 	               help="Exponent applied to custom light color channels for use in the addition map blend phase")
