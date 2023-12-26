@@ -782,7 +782,7 @@ class ShaderGenerator(dict):
 				# surface light
 				if "lightIntensity" in shader["meta"] and shader["meta"]["lightIntensity"] > 0:
 					# intensity
-					content += "\tq3map_surfacelight "+"%d" % shader["meta"]["lightIntensity"]+"\n"
+					content += "\tq3map_surfaceLight "+"%d" % shader["meta"]["lightIntensity"]+"\n"
 
 					# color
 					if "lightColor" in shader["meta"]:
