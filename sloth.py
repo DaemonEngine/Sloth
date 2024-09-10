@@ -99,6 +99,7 @@ class ShaderGenerator(dict):
 		self["options"]["lightColors"]      = dict() # color name -> RGB color triple
 		self["options"]["customLights"]     = dict() # intensity name -> intensity; for grayscale addition maps
 		self["options"]["predefLights"]     = dict() # intensity name -> intensity; for non-grayscale addition maps
+		self["options"]["additionGrayscale"] = False # wether to consider the addition maps are gray without checking
 		self["options"]["precalcColors"]    = False  # whether to precalculate fixed light colors
 		self["options"]["guessKeywords"]    = False  # whether to try to guess additional keywords based on shader (meta)data
 		self["options"]["radToAddExp"]      = 1.0    # exponent used to convert radiosity RGB values into addition map color modifiers
@@ -289,6 +290,11 @@ class ShaderGenerator(dict):
 		"Adds a light intensity to be used for light emitting shaders with non-grayscale addition maps."
 		self.__addLightIntensity(intensity, False)
 
+	def __setAdditionGrayscale(self, value, shader = None):
+		if not shader:
+			shader = self
+
+		shader["options"]["additionGrayscale"] = value
 
 	def __setPrecalcColors(self, value, shader = None):
 		if not shader:
@@ -378,6 +384,9 @@ class ShaderGenerator(dict):
 						for intensity in options["predefLights"].split():
 							self.__addLightIntensity(int(intensity), False, shader)
 
+					elif option == "additionGrayscale":
+						self.__setAdditionGrayscale(options.getboolean(option), shader)
+
 					elif option == "precalcColors":
 						self.__setPrecalcColors(options.getboolean(option), shader)
 
@@ -461,44 +470,49 @@ class ShaderGenerator(dict):
 
 		# addition map
 		if shader["addition"]:
-			imgpath = shader["abspath"]+os.path.sep+shader["addition"]+shader["ext"]["addition"]
-			if os.path.isfile(imgpath):
-				img = Image.open(imgpath, "r")
+			if shader["options"]["additionGrayscale"]:
+				shader["meta"]["additionGrayscale"] = True
+			else:
+				imgpath = shader["abspath"]+os.path.sep+shader["addition"]+shader["ext"]["addition"]
+				if os.path.isfile(imgpath):
+					img = Image.open(imgpath, "r")
 
-				gray = ( img.mode in ("L", "LA") )
+					gray = ( img.mode in ("L", "LA") )
 
-				img = img.convert("RGB")
+					img = img.convert("RGB")
 
-				# check for RGB images with no actual non-gray color
-				if not gray:
-					colors = img.getcolors(maxcolors = 256)
-					if colors:
-						gray = True
-						for _, rgb in colors:
-							if not rgb[0] == rgb[1] == rgb[2]:
-								gray = False
-								break
+					# check for RGB images with no actual non-gray color
+					if not gray:
+						colors = img.getcolors(maxcolors = 256)
+						if colors:
+							gray = True
+							for _, rgb in colors:
+								if not rgb[0] == rgb[1] == rgb[2]:
+									gray = False
+									break
 
-				shader["meta"]["additionGrayscale"] = gray
+					shader["meta"]["additionGrayscale"] = gray
 
-				# get average color if needed
-				if shader["options"]["precalcColors"]:
-					value = channel = 0
-					average = [0, 0, 0]
-					for count in img.histogram():
-						average[channel] += count * ( value / 0xff )
-						value += 1
-						if value > 0xff:
-							average[channel] /= img.size[0] * img.size[1]
-							value = 0
-							channel += 1
-							if channel == 3:
-								break
+					# get average color if needed
+					if shader["options"]["precalcColors"]:
+						value = channel = 0
+						average = [0, 0, 0]
+						for count in img.histogram():
+							average[channel] += count * ( value / 0xff )
+							value += 1
+							if value > 0xff:
+								average[channel] /= img.size[0] * img.size[1]
+								value = 0
+								channel += 1
+								if channel == 3:
+									break
 
-					if gray:
-						shader["meta"]["additionAverage"] = (average[0], average[0], average[0])
-					else:
-						shader["meta"]["additionAverage"] = tuple(average)
+						if gray:
+							shader["meta"]["additionAverage"] = (average[0], average[0], average[0])
+						else:
+							shader["meta"]["additionAverage"] = tuple(average)
+				else:
+					shader["meta"]["additionGrayscale"] = False
 
 
 	def __addKeywords(self, shader):
@@ -1217,6 +1231,7 @@ if __name__ == "__main__":
 	sg.setHeightNormalsMod(a.height_normals)
 	sg.setAlphaShadows(not a.no_alpha_shadows)
 	sg.setEditorOpacity(a.editor_opacity)
+	# sg.setAdditionGrayScale(a.addition_grayscale)
 	sg.setPrecalcColors(a.precalc_colors)
 
 	if a.header:
