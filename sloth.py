@@ -355,7 +355,9 @@ class ShaderGenerator(dict):
 					if option == "colors":
 						shader["options"]["lightColors"].clear()
 
+						print(path)
 						for nameAndColor in options[option].split():
+							print(nameAndColor)
 							try:
 								name, color = nameAndColor.split(":")
 							except ValueError:
@@ -434,65 +436,69 @@ class ShaderGenerator(dict):
 	def __analyzeMaps(self, shader):
 		"Retrieves metadata from a shader's maps, such as whether there's an alpha channel on the diffuse map."
 		# diffuse map
-		img = Image.open(shader["abspath"]+os.path.sep+shader["diffuse"]+shader["ext"]["diffuse"], "r")
+		imgpath = shader["abspath"]+os.path.sep+shader["diffuse"]+shader["ext"]["diffuse"]
+		if os.path.isfile(imgpath):
+			img = Image.open(imgpath, "r")
 
-		# look for transparency
-		if img.mode in ("RGBA", "LA"):
-			if img.getextrema()[-1][0] == 255:
-				self.verbose("Found completely white alpha channel in "+img.filename+".")
-				shader["meta"]["diffuseAlpha"] = False
-			else:
+			# look for transparency
+			if img.mode in ("RGBA", "LA"):
+				if img.getextrema()[-1][0] == 255:
+					self.verbose("Found completely white alpha channel in "+img.filename+".")
+					shader["meta"]["diffuseAlpha"] = False
+				else:
+					shader["meta"]["diffuseAlpha"] = True
+			elif img.mode == "p" and "transparency" in img.info:
 				shader["meta"]["diffuseAlpha"] = True
-		elif img.mode == "p" and "transparency" in img.info:
-			shader["meta"]["diffuseAlpha"] = True
-		else:
-			shader["meta"]["diffuseAlpha"] = False
+			else:
+				shader["meta"]["diffuseAlpha"] = False
 
-		# check if transparency is binary
-		shader["meta"]["diffuseAlphaBin"] = False
-		if shader["meta"]["diffuseAlpha"]:
-			alphaSequence = img.split()[-1].tobytes()
-			if self.binaryAlphaRE.match(alphaSequence):
-				shader["meta"]["diffuseAlphaBin"] = True
+			# check if transparency is binary
+			shader["meta"]["diffuseAlphaBin"] = False
+			if shader["meta"]["diffuseAlpha"]:
+				alphaSequence = img.split()[-1].tobytes()
+				if self.binaryAlphaRE.match(alphaSequence):
+					shader["meta"]["diffuseAlphaBin"] = True
 
 		# addition map
 		if shader["addition"]:
-			img = Image.open(shader["abspath"]+os.path.sep+shader["addition"]+shader["ext"]["addition"], "r")
+			imgpath = shader["abspath"]+os.path.sep+shader["addition"]+shader["ext"]["addition"]
+			if os.path.isfile(imgpath):
+				img = Image.open(imgpath, "r")
 
-			gray = ( img.mode in ("L", "LA") )
+				gray = ( img.mode in ("L", "LA") )
 
-			img = img.convert("RGB")
+				img = img.convert("RGB")
 
-			# check for RGB images with no actual non-gray color
-			if not gray:
-				colors = img.getcolors(maxcolors = 256)
-				if colors:
-					gray = True
-					for _, rgb in colors:
-						if not rgb[0] == rgb[1] == rgb[2]:
-							gray = False
-							break
+				# check for RGB images with no actual non-gray color
+				if not gray:
+					colors = img.getcolors(maxcolors = 256)
+					if colors:
+						gray = True
+						for _, rgb in colors:
+							if not rgb[0] == rgb[1] == rgb[2]:
+								gray = False
+								break
 
-			shader["meta"]["additionGrayscale"] = gray
+				shader["meta"]["additionGrayscale"] = gray
 
-			# get average color if needed
-			if shader["options"]["precalcColors"]:
-				value = channel = 0
-				average = [0, 0, 0]
-				for count in img.histogram():
-					average[channel] += count * ( value / 0xff )
-					value += 1
-					if value > 0xff:
-						average[channel] /= img.size[0] * img.size[1]
-						value = 0
-						channel += 1
-						if channel == 3:
-							break
+				# get average color if needed
+				if shader["options"]["precalcColors"]:
+					value = channel = 0
+					average = [0, 0, 0]
+					for count in img.histogram():
+						average[channel] += count * ( value / 0xff )
+						value += 1
+						if value > 0xff:
+							average[channel] /= img.size[0] * img.size[1]
+							value = 0
+							channel += 1
+							if channel == 3:
+								break
 
-				if gray:
-					shader["meta"]["additionAverage"] = (average[0], average[0], average[0])
-				else:
-					shader["meta"]["additionAverage"] = tuple(average)
+					if gray:
+						shader["meta"]["additionAverage"] = (average[0], average[0], average[0])
+					else:
+						shader["meta"]["additionAverage"] = tuple(average)
 
 
 	def __addKeywords(self, shader):
