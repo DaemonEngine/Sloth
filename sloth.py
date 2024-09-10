@@ -30,6 +30,24 @@ defaultSuffixes = {
 	"preview":      "_p",
 }
 
+
+class VfsPathBuilder():
+	def __init__(self, aliases, shader):
+		self.aliases = aliases
+		self.shader  = shader
+		self.path    = shader["relpath"]+"/"
+		self.ext     = shader["ext"]
+
+	def getVfsPath(self, maptype):
+		basename = self.shader[maptype]
+		ext = self.ext[maptype]
+		name = basename+ext
+		if name in self.aliases.keys():
+			return os.path.splitext(self.aliases[name])[0]
+		else:
+			return self.path+basename
+
+
 class ShaderGenerator(dict):
 
 	# valid color format
@@ -73,6 +91,7 @@ class ShaderGenerator(dict):
 		self.sets             = dict() # set name -> shader name -> key -> value
 		self.header           = ""     # header to be prepended to output
 		self.suffixes         = dict() # map type -> suffix
+		self.aliases          = dict() # name → VFS path
 		self.setSuffixes()
 
 		# default options that can be overwritten on a per-directory/shader basis
@@ -568,6 +587,15 @@ class ShaderGenerator(dict):
 		self.sets[setname].update(newShaders)
 
 
+	def __readAliases(self, path):
+		filepath = os.path.join(path,"sloth-alias.txt")
+		if os.path.isfile(filepath):
+			with open(filepath) as f:
+				for line in f.readlines():
+					name, vfspath = line.strip("\n").split(" ")
+					self.aliases[name] = vfspath
+
+
 	def generateSet(self, path, setname = None, cutextension = None):
 		"Generates shader data for a given texture source folder."
 		abspath    = os.path.abspath(path)
@@ -578,8 +606,10 @@ class ShaderGenerator(dict):
 		mapext     = dict() # map name (no extension) -> map filename (with extension)
 		slothfiles = set()  # sloth per-shader config file names (no extension)
 
+		self.__readAliases(abspath)
+
 		# retrieve all maps by type
-		for filename in filelist:
+		for filename in filelist + list(self.aliases):
 			mapname, ext = os.path.splitext(filename)
 
 			# check if this file extension is not among known unsupported ones
@@ -737,14 +767,16 @@ class ShaderGenerator(dict):
 			for shadername in names:
 				# prepare content
 				shader = self.sets[setname][shadername]
-				path   = shader["relpath"]+"/"
 				stage_keys = ""
+
+				vfsPathBuilder = VfsPathBuilder(self.aliases, shader)
+				getVfsPath = vfsPathBuilder.getVfsPath
 
 				# decide on a preview image
 				if shader["preview"]:
-					preview = shader["preview"]
+					preview = "preview"
 				elif shader["diffuse"]:
-					preview = shader["diffuse"]
+					preview = "diffuse"
 				else:
 					preview = None
 
@@ -758,7 +790,7 @@ class ShaderGenerator(dict):
 
 				# preview image
 				if preview:
-					content += "\tqer_editorImage "+path+preview+"\n"
+					content += "\tqer_editorImage "+getVfsPath(preview)+"\n"
 
 					# in-editor transparency
 					if shader["meta"]["diffuseAlpha"] and shader["options"]["editorOpacity"] < 1:
@@ -790,9 +822,9 @@ class ShaderGenerator(dict):
 					elif "additionAverage" in shader["meta"]:
 						content += "\tq3map_lightRGB "+"%.3f %.3f %.3f" % shader["meta"]["additionAverage"]+"\n\n"
 					elif shader["addition"]:
-						content += "\tq3map_lightImage "+path+shader["addition"]+"\n\n"
+						content += "\tq3map_lightImage "+getVfsPath("addition")+"\n\n"
 					elif shader["diffuse"]:
-						content += "\tq3map_lightImage "+path+shader["diffuse"]+"\n\n"
+						content += "\tq3map_lightImage "+getVfsPath("diffuse")+"\n\n"
 					else:
 						content += "\tq3map_lightRGB 1.000 1.000 1.000\n\n"
 
@@ -803,13 +835,13 @@ class ShaderGenerator(dict):
 							content += "\t{\n"
 							in_stage = True
 
-						content += "\t\tdiffuseMap "+path+shader["diffuse"]+"\n"
+						content += "\t\tdiffuseMap "+getVfsPath("diffuse")+"\n"
 
 					# with alpha channel
 					if shader["meta"]["diffuseAlpha"]:
 						if shader["options"]["renderer"] != "daemon":
 							content += "\t{\n"+\
-							           "\t\tmap "+path+shader["diffuse"]+"\n"
+							           "\t\tmap "+getVfsPath("diffuse")+"\n"
 
 							if shader["options"]["renderer"] != "quake3":
 								content += "\t\tstage diffuseMap\n"
@@ -835,10 +867,10 @@ class ShaderGenerator(dict):
 
 					# without alpha channel
 					elif shader["options"]["renderer"] == "xreal":
-						content += "\tdiffuseMap "+path+shader["diffuse"]+"\n"
+						content += "\tdiffuseMap "+getVfsPath("diffuse")+"\n"
 					elif shader["options"]["renderer"] == "quake3":
 						content += "\t{\n"+\
-						           "\t\tmap "+path+shader["diffuse"]+"\n"+\
+						           "\t\tmap "+getVfsPath("diffuse")+"\n"+\
 						           "\t}\n"
 
 				# normal & height map
@@ -848,18 +880,18 @@ class ShaderGenerator(dict):
 							content += "\t{\n"
 							in_stage = True
 
-						content += "\t\tnormalMap "+path+shader["normal"]+"\n"
+						content += "\t\tnormalMap "+getVfsPath("normal")+"\n"
 
 					elif shader["options"]["renderer"] == "xreal":
 						if shader["height"] and shader["options"]["heightNormalsMod"] > 0:
-							content += "\tnormalMap addnormals ( "+path+shader["normal"]+\
-									   ", heightmap ( "+path+shader["height"]+", "+\
+							content += "\tnormalMap addnormals ( "+getVfsPath("normal")+\
+									   ", heightmap ( "+getVfsPath("height")+", "+\
 									   "%.2f" % shader["options"]["heightNormalsMod"]+" ) )\n"
 						else:
-							content += "\tnormalMap "+path+shader["normal"]+"\n"
+							content += "\tnormalMap "+getVfsPath("normal")+"\n"
 
 				if not shader["normal"] and shader["height"] and shader["options"]["heightNormalsMod"] > 0 and shader["options"]["renderer"] == "xreal":
-						content += "\tnormalMap heightmap ( "+path+shader["height"]+", "+\
+						content += "\tnormalMap heightmap ( "+getVfsPath("height")+", "+\
 								   "%.2f" % shader["options"]["heightNormalsMod"]+" )\n"
 
 				if shader["normalheight"]:
@@ -868,7 +900,7 @@ class ShaderGenerator(dict):
 							content += "\t{\n"
 							in_stage = True
 
-						content += "\t\tnormalHeightMap "+path+shader["normalheight"]+"\n"
+						content += "\t\tnormalHeightMap "+getVfsPath("normalheight")+"\n"
 
 				if shader["height"]:
 					if shader["options"]["renderer"] == "daemon":
@@ -876,7 +908,7 @@ class ShaderGenerator(dict):
 							content += "\t{\n"
 							in_stage = True
 
-						content += "\t\theightMap "+path+shader["height"]+"\n"
+						content += "\t\theightMap "+getVfsPath("height")+"\n"
 
 				# physical map
 				if shader["physical"]:
@@ -885,7 +917,7 @@ class ShaderGenerator(dict):
 							content += "\t{\n"
 							in_stage = True
 
-						content += "\t\tphysicalMap "+path+shader["physical"]+"\n"
+						content += "\t\tphysicalMap "+getVfsPath("physical")+"\n"
 
 				# specular map
 				if shader["specular"]:
@@ -894,10 +926,10 @@ class ShaderGenerator(dict):
 							content += "\t{\n"
 							in_stage = True
 
-						content += "\t\tspecularMap "+path+shader["specular"]+"\n"
+						content += "\t\tspecularMap "+getVfsPath("specular")+"\n"
 
 					elif shader["options"]["renderer"] == "xreal":
-						content += "\tspecularMap "+path+shader["specular"]+"\n"
+						content += "\tspecularMap "+getVfsPath("specular")+"\n"
 
 				# addition map
 				if shader["addition"]:
@@ -908,10 +940,10 @@ class ShaderGenerator(dict):
 							content += "\t{\n"
 							in_stage = True
 
-						content += "\t\tglowMap "+path+shader["addition"]+"\n"
+						content += "\t\tglowMap "+getVfsPath("addition")+"\n"
 
 					elif shader["options"]["renderer"] == "xreal" and not has_light_color:
-						content += "\tglowMap "+path+shader["addition"]+"\n"
+						content += "\tglowMap "+getVfsPath("addition")+"\n"
 
 					elif shader["options"]["renderer"] == "quake3"\
 					or (shader["options"]["renderer"] == "daemon" and has_light_color)\
@@ -922,7 +954,7 @@ class ShaderGenerator(dict):
 							in_stage = False
 
 						stage_keys += "\t{\n"+\
-						           "\t\tmap "+path+shader["addition"]+"\n"+\
+						           "\t\tmap "+getVfsPath("addition")+"\n"+\
 						           "\t\tblend add\n"
 						in_stage = True
 
