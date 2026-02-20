@@ -525,7 +525,6 @@ class ShaderGenerator(dict):
 		if shader["meta"]["diffuseAlpha"]:
 			keywords.setdefault("surfaceparm", set())
 			keywords["surfaceparm"].add("trans")
-			keywords["cull"] = {"none"}
 
 			if options["alphaShadows"]:
 				keywords["surfaceparm"].add("alphashadow")
@@ -606,6 +605,37 @@ class ShaderGenerator(dict):
 		# add new shaders (adds back original shader under new name, without addition map)
 		self.sets[setname].update(newShaders)
 
+	def __expandTranslucentShaders(self, setname):
+		"Replaces every shader with a diffuse map having an alpha channel with a set of shaders"
+		"with culling enabled or disabled."
+
+		newShaders = dict()
+		delNames   = set()
+
+		for shadername in self.sets[setname]:
+			shader = self.sets[setname][shadername]
+
+			if shader["meta"]["diffuseAlpha"]:
+				# mark original shader for deletion
+				delNames.add(shadername)
+
+				shader = self.sets[setname][shadername]
+
+				# disable culling (two-sided shader), use the original name
+				newShader = copy.deepcopy(shader)
+				newShader["keywords"]["cull"] = {"none"}
+				newShaders[shadername] = newShader
+
+				# keep culling disabled (one-sided shader), append "_onesided" to its name
+				newShader = copy.deepcopy(shader)
+				newShaders[shadername + "_onesided"] = newShader
+
+		# delete old reference to the original
+		for shadername in delNames:
+			self.sets[setname].pop(shadername)
+
+		# add new shaders
+		self.sets[setname].update(newShaders)
 
 	def __readAliases(self, path):
 		filepath = os.path.join(path,"sloth-alias.txt")
@@ -723,6 +753,8 @@ class ShaderGenerator(dict):
 
 		# expand relevant shaders into multiple light emitting ones
 		self.__expandLightShaders(setname)
+
+		self.__expandTranslucentShaders(setname)
 
 		numShaders = str(len(self.sets[setname]))
 
