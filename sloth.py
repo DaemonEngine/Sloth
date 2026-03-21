@@ -107,6 +107,10 @@ class ShaderGenerator(dict):
 		self["options"]["editorOpacity"]    = 1.0    # in-editor opacity of transparent shaders
 		self["options"]["alphaTest"]        = None   # whether to use an alphaFunc/alphaTest keyword or smooth blending (default)
 		self["options"]["alphaShadows"]     = True   # whether to add the alphashadows surfaceparm keyword to relevant shaders
+		self["options"]["rawColorMap"]      = False  # wether to add the rawColorMap keyword to relevant shader stages
+		self["options"]["linearColorMap"]   = False  # wether to add the linearColorMap keyword to relevant shader stages
+		self["options"]["rawSpecularMap"]   = False  # wether to add the rawSpecularMap keyword to relevant shader stages
+		self["options"]["linearSpecularMap"] = False # wether to add the linearSpecularMap keyword to relevant shader stages
 		self["options"]["renderer"]         = self.defaultRenderer
 
 
@@ -235,6 +239,48 @@ class ShaderGenerator(dict):
 	def setAlphaShadows(self, value = True):
 		"Whether to add the alphashadows surfaceparm keyword to relevant shaders"
 		self.__setAlphaShadows(value)
+
+
+	def __setRawColorMap(self, value, shader = None):
+		if not shader:
+			shader = self
+
+		shader["options"]["rawColorMap"] = value
+
+	def setRawColorMap(self, value = True):
+		"Whether to add the rawColorMap keyword to relevant shader stages"
+		self.__setRawColorMap(value)
+
+	def __setLinearColorMap(self, value, shader = None):
+		if not shader:
+			shader = self
+
+		shader["options"]["linearColorMap"] = value
+
+	def setLinearColorMap(self, value = True):
+		"Whether to add the linearColorMap keyword to relevant shader stages"
+		self.__setLinearColorMap(value)
+
+
+	def __setRawSpecularMap(self, value, shader = None):
+		if not shader:
+			shader = self
+
+		shader["options"]["rawSpecularMap"] = value
+
+	def setRawSpecularMap(self, value = True):
+		"Whether to add the rawSpecularMap keyword to relevant shader stages"
+		self.__setRawSpecularMap(value)
+
+	def __setLinearSpecularMap(self, value, shader = None):
+		if not shader:
+			shader = self
+
+		shader["options"]["linearSpecularMap"] = value
+
+	def setLinearSpecularMap(self, value = True):
+		"Whether to add the linearSpecularMap keyword to relevant shader stages"
+		self.__setLinearSpecularMap(value)
 
 
 	def __addLightColor(self, name, color, shader = None):
@@ -415,6 +461,18 @@ class ShaderGenerator(dict):
 
 					elif option == "alphaShadows":
 						self.__setAlphaShadows(options.getboolean(option), shader)
+
+					elif option == "rawColorMap":
+						self.__setRawColorMap(options.getboolean(option), shader)
+
+					elif option == "linearColorMap":
+						self.__setLinearColorMap(options.getboolean(option), shader)
+
+					elif option == "rawSpecularMap":
+						self.__setRawSpecularMap(options.getboolean(option), shader)
+
+					elif option == "linearSpecularMap":
+						self.__setLinearSpecularMap(options.getboolean(option), shader)
 
 					elif option == "heightNormalsMod":
 						self.__setHeightNormalsMod(options.getfloat(option), shader)
@@ -889,6 +947,12 @@ class ShaderGenerator(dict):
 
 						content += "\t\tdiffuseMap "+getVfsPath("diffuse")+"\n"
 
+						if shader["options"]["rawColorMap"]:
+							content += "\t\trawColorMap\n"
+
+						if shader["options"]["linearColorMap"]:
+							content += "\t\tlinearColorMap\n"
+
 					# with alpha channel
 					if shader["meta"]["diffuseAlpha"]:
 						if shader["options"]["renderer"] != "daemon":
@@ -979,6 +1043,12 @@ class ShaderGenerator(dict):
 							in_stage = True
 
 						content += "\t\tspecularMap "+getVfsPath("specular")+"\n"
+
+						if shader["options"]["rawSpecularMap"]:
+							content += "\t\trawSpecularMap\n"
+
+						if shader["options"]["linearSpecularMap"]:
+							content += "\t\tlinearSpecularMap\n"
 
 					elif shader["options"]["renderer"] == "xreal":
 						content += "\tspecularMap "+getVfsPath("specular")+"\n"
