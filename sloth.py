@@ -111,6 +111,7 @@ class ShaderGenerator(dict):
 		self["options"]["linearColorMap"]   = False  # wether to add the linearColorMap keyword to relevant shader stages
 		self["options"]["rawSpecularMap"]   = False  # wether to add the rawSpecularMap keyword to relevant shader stages
 		self["options"]["linearSpecularMap"] = False # wether to add the linearSpecularMap keyword to relevant shader stages
+		self["options"]["ignore"]           = False  # wether to ignore the texture and not generate a shader
 		self["options"]["renderer"]         = self.defaultRenderer
 
 
@@ -353,6 +354,17 @@ class ShaderGenerator(dict):
 		self.__setPrecalcColors(value)
 
 
+	def __setIgnore(self, value, shader = None):
+		if not shader:
+			shader = self
+
+		shader["options"]["ignore"] = value
+
+	def setIgnore(self, value = True):
+		"Whether to ignore the texture and not generate a shader."
+		self.__setIgnore(value)
+
+
 	def __setRenderer(self, renderer, shader = None):
 		if not shader:
 			shader = self
@@ -479,6 +491,9 @@ class ShaderGenerator(dict):
 
 					elif option == "editorOpacity":
 						self.__setEditorOpacity(options.getfloat(option), shader)
+
+					elif option == "ignore":
+						self.__setIgnore(options.getboolean(option), shader)
 
 					elif option == "renderer":
 						self.__setRenderer(options[option], shader)
@@ -878,6 +893,9 @@ class ShaderGenerator(dict):
 				# prepare content
 				shader = self.sets[setname][shadername]
 				stage_keys = ""
+
+				if shader["options"]["ignore"]:
+					continue
 
 				vfsPathBuilder = VfsPathBuilder(self.aliases, shader)
 				getVfsPath = vfsPathBuilder.getVfsPath
